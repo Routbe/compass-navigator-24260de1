@@ -41,11 +41,20 @@ describe("card physics", () => {
   });
 });
 
-import { MAX_TILT_RAD, TILT_LERP, lerpDamp, orientationToTilt } from "./card-physics";
+import { GYRO_REST_MS, MAX_TILT_RAD, TILT_LERP, lerpDamp, orientationToTilt, tiltTarget } from "./card-physics";
 
 describe("tilt damping and limits", () => {
-  it("limits tilt to 17 degrees per axis", () => {
-    expect((MAX_TILT_RAD * 180) / Math.PI).toBeCloseTo(17, 5);
+  it("limits tilt to 0.25 rad per axis", () => {
+    expect(MAX_TILT_RAD).toBe(0.25);
+  });
+  it("recentres a still phone after 2 seconds", () => {
+    expect(GYRO_REST_MS).toBe(2000);
+    expect(tiltTarget(0.6, 1999, GYRO_REST_MS)).toBe(0.6);
+    expect(tiltTarget(0.6, 2001, GYRO_REST_MS)).toBe(0);
+    expect(tiltTarget(0.6, 1e9, Infinity)).toBe(0.6);
+  });
+  it("treats the calibrated pose as flat", () => {
+    expect(orientationToTilt(60, 10, 0, { x: 10, y: 60 })).toEqual({ x: 0, y: 0 });
   });
   it("uses a damping factor between 0.05 and 0.1 per 60 Hz frame", () => {
     expect(TILT_LERP).toBeGreaterThanOrEqual(0.05);
