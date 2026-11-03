@@ -44,7 +44,7 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, max: number, size:
 }
 
 /** Printed QR placement (canvas px): the white panel is exactly the QR + quiet zone. */
-export const FRONT_QR = { x: 32, y: FACE_H - 172, size: 140, quiet: 2 } as const;
+export const FRONT_QR = { x: 28, y: FACE_H - 188, size: 160, quiet: 2 } as const;
 export const BACK_QR = { x: 80, y: Math.round(FACE_H * 0.13), size: FACE_W - 160, quiet: 2 } as const;
 export type QrBox = { x: number; y: number; w: number };
 
