@@ -29,9 +29,9 @@
 - [ ] Verify physical pairing end to end — blocked by factory inventory, separate activation proof, compatible card/device and a configured ROUT sign-in session.
 - [ ] Verify secure QR replay/freeze storage and terminal challenge-response end to end — blocked by reviewed card storage and terminal integration; source primitives are not a deployed hardware system.
 # Card feel & Studio glass (Nov 2026)
-- [ ] Grab-and-spin card rotation with momentum and face snap.
-- [ ] Native-resolution card rendering (DPR up to 3, max anisotropy).
-- [ ] Studio Liquid Glass buttons: refraction, aberration, saturation, specular, light/dark/neon presets, smooth transitions.
+- [x] Grab-and-spin card rotation with momentum and face snap.
+- [x] Native-resolution card rendering (DPR up to 3, max anisotropy).
+- [x] Studio Liquid Glass buttons: refraction, aberration, saturation, specular, light/dark/neon presets, smooth transitions.
 - [ ] Fluid text / dissolve / MSDF typography effects — later phase.
-- [ ] Lock all card elements rigidly (no watermark/parts drifting during motion).
-- [ ] Front QR stays scannable; back QR: remove black edge, slimmer white quiet zone.
+- [x] Lock all card elements rigidly (no watermark/parts drifting during motion).
+- [x] Front QR stays scannable; back QR: remove black edge, slimmer white quiet zone.
