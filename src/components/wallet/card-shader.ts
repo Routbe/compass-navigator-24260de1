@@ -201,6 +201,22 @@ void main() {
   col += (scratches - 0.02) * (0.4 + 0.6 * fres);
   col = mix(col, col + vec3(0.06, 0.11, 0.16) * (0.6 + 0.4 * diff), cayenne * 0.4);
 
+  // Anisotropic GGX (brushed white-gold / titanium), brush direction = card X.
+  float brush = sin(vUv.y * 2500.0) * 0.02 * printable;
+  vec3 Nb = normalize(N + vB * brush);
+  float ax = 0.42;  // stretched along the brush
+  float ay = 0.06;
+  float tH = dot(H, vT);
+  float bH = dot(H, vB);
+  float nH = max(dot(Nb, H), 0.0);
+  float dAniso = tH * tH / (ax * ax) + bH * bH / (ay * ay) + nH * nH;
+  float ggxAniso = 1.0 / (3.14159 * ax * ay * dAniso * dAniso + 1e-4);
+  float nL = clamp(dot(Nb, L), 0.0, 1.0);
+  vec3 titanium = mix(vec3(0.78, 0.8, 0.83), vec3(0.95, 0.88, 0.74), 0.35);
+  float metalZone = printable * clamp(isMetal + uAniso + mask.r * 0.5, 0.0, 1.0);
+  vec3 anisoSpec = titanium * min(ggxAniso * nL * 0.06, 1.4) * (0.6 + 0.4 * fres);
+  col += (anisoSpec + titanium * brush * 1.5) * metalZone;
+
   // Hologram layer floats 1 mm below the polycarbonate: parallax from the
   // tangent-space view vector plus the gyro / tilt offset.
   vec3 Vt = vec3(dot(V, vT), dot(V, vB), max(dot(V, vN), 0.2));
@@ -246,6 +262,22 @@ void main() {
   col += ((n - 0.5) * 0.012 + (strobe - 0.5) * 0.003) * uMotion * printable;
   // Preserve exact printed QR, portrait, identity and MRZ pixels on both sides.
   col = mix(base.rgb, col, printable);
+
+  // Glass / clearcoat over the whole face, photo and QR included. Uses the
+  // flat geometric normal (no emboss, no brush) so the reflection stays razor sharp
+  // without blurring the layers underneath. Roughness 0.008, pure Schlick (F0 = 0.04).
+  vec3 Nc = vN * (float(gl_FrontFacing) * 2.0 - 1.0);
+  float cosC = clamp(dot(Nc, V), 0.0, 1.0);
+  float schlick = 0.04 + 0.96 * pow(1.0 - cosC, 5.0);
+  float ccA = 0.008 * 0.008;
+  float nHc = clamp(dot(Nc, H), 0.0, 1.0);
+  float dC = nHc * nHc * (ccA - 1.0) + 1.0;
+  float ggxC = ccA / (3.14159 * dC * dC + 1e-7);
+  vec3 Rc = reflect(-V, Nc);
+  vec3 envC = mix(vec3(0.02), vec3(1.0), smoothstep(0.35, 0.95, Rc.y))
+    + vec3(0.9, 0.95, 1.0) * smoothstep(0.82, 0.98, abs(Rc.x));
+  vec3 clearcoatSpecular = (min(ggxC * clamp(dot(Nc, L), 0.0, 1.0), 40.0) * 0.02 + envC * 0.6) * schlick;
+  col += clearcoatSpecular;
 
   gl_FragColor = vec4(max(col, 0.0), 1.0);
   #include <tonemapping_fragment>
