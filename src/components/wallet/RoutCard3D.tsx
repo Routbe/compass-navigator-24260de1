@@ -10,7 +10,7 @@ import { Environment, Lightformer, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { configureTextBuilder } from "troika-three-text";
 import { CARD_RATIO, FACE_H, FACE_W, type CardFaces } from "./card-faces";
-import { MAX_TILT_RAD, clampTilt, lerpDamp, stepSpring, type Spring } from "./card-physics";
+import { MAX_TILT_RAD, clampTilt, lerpDamp, stepSpring, tiltTarget, type Spring } from "./card-physics";
 import { createSecurityMaterial } from "./card-shader";
 
 // Troika's nested blob importScripts conflicts with our strict script-src.
@@ -18,7 +18,8 @@ import { createSecurityMaterial } from "./card-shader";
 configureTextBuilder({ useWorker: false, defaultFontURL: "/fonts/Inter-SemiBold.ttf" });
 
 export type CardFinish = "metal" | "glass" | "holo" | "junior";
-export type TiltRef = { current: { x: number; y: number; at: number } };
+/** `rest` (ms): recentre after this long without change; omitted = never (mouse). */
+export type TiltRef = { current: { x: number; y: number; at: number; rest?: number } };
 export type LiveRef = { current: { seed: [number, number, number, number]; expiresAt: number; windowMs: number } };
 export type ZoomRef = { current: number };
 
@@ -215,8 +216,9 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
     }
     m.flip += ((flipped ? Math.PI : 0) - m.flip) * k(FLIP_DAMP);
     // Low-pass the raw target first (hand tremor), then the mass-spring adds inertia.
-    m.tx = lerpDamp(m.tx, clampTilt(t.x), dt);
-    m.ty = lerpDamp(m.ty, clampTilt(t.y), dt);
+    const rest = t.rest ?? Infinity;
+    m.tx = lerpDamp(m.tx, tiltTarget(t.x, now - t.at, rest), dt);
+    m.ty = lerpDamp(m.ty, tiltTarget(t.y, now - t.at, rest), dt);
     m.yaw = stepSpring(m.yaw, m.tx * TILT_YAW, dt);
     m.pitch = stepSpring(m.pitch, -m.ty * TILT_PITCH, dt);
     const g = group.current;
