@@ -8,3 +8,19 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Repository import boundaries
+- Preserve the imported ROUT TanStack Start routes, design system and MDX catalog because this project is a source import, not a recreation of the GitHub webpage.
+- Exclude source environment files, repository metadata, generated route trees and integration bindings because credentials and connections belong to this project.
+- Retain the existing cookie-based ROUT account adapters without a Cloud bearer attacher because no account or data migration has been authorized.
+- Keep database migrations as source only until the existing service is connected and reviewed because importing code does not authorize changing live data.
+- Retain the standalone media worker as source only because persistent processing requires separate deployment outside the request-bound app.
+- Pair client cards only through reviewed factory inventory and a separate activation proof; WebNFC reads a hardware ID, never keys, because public NDEF data cannot prove ownership.
+- Keep standard TD1 field positions and 7/3/1 integrity checks while labeling hash-filled birth fields as a privacy extension, because layout/checksums alone do not establish ICAO certification.
+- Wallet and physical-card translations use the exhaustive browser-safe wallet dictionary and pure pairing transitions; NFC readers are aborted on exit and server success alone triggers activation feedback, because public tag detection is not ownership verification.
+- Google profile claims enforce ownership at the server function and both legacy issuance endpoints, derive identities from the active session and accept class configuration only under the configured issuer, because UI-only checks leave alternate claim paths exposed.
+- Ordinary-member profile writes through the query gateway use an explicit field allowlist and server-derived owner scope; new columns remain unwritable by default because a protected-field denylist cannot anticipate schema additions.
+- Card authentication uses a shared positive-active gate and atomic database nonce consumption; unavailable storage denies authentication. Dedicated auth and card signing secrets never derive from database credentials because service access must not imply signing authority.
+- Card hardening is a forward-only SQL migration preserving existing user_sessions; used_nonces is the canonical QR replay store with expiry validation and indexed cleanup, while audit_logs excludes bearer material. Why: no duplicate replay decisions or imported-account migration.
+- Card optical layers share one bounded analytic shader on both faces, exclude QR/portrait/identity/MRZ regions, and use local SDF border/foil text synchronized before readiness; keep these visual features separate from authentication and never infer physical weight or target-device frame rates from rendering.
+- Configure card Troika typesetting without blob workers before the first font request because nested importScripts violates the existing CSP; preserve GPU SDF rendering and never relax script-src to make text render.
