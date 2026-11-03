@@ -10,8 +10,12 @@ export const CARD_DAMPING_RATIO = 0.78;
 /** Gyro noise below this angle (rad) is ignored before it reaches the spring. */
 export const GYRO_DEADZONE = 0.012;
 const SUBSTEP = 1 / 240;
-/** Hard limit on tilt rotation per axis: 17 degrees, never enough to show the back. */
-export const MAX_TILT_RAD = (17 * Math.PI) / 180;
+/** Hard limit on tilt rotation per axis: 0.25 rad (~14 deg), never enough to show the back. */
+export const MAX_TILT_RAD = 0.25;
+/** A still phone (no gyro change) recentres after this long. */
+export const GYRO_REST_MS = 2000;
+/** Readings averaged when the pass opens to find the user's own "flat" pose. */
+export const GYRO_CALIBRATION_SAMPLES = 10;
 /** Low-pass on the tilt target, per 60 Hz frame (0.05..0.1 = heavy, lagging). */
 export const TILT_LERP = 0.08;
 
@@ -25,16 +29,26 @@ export function lerpDamp(current: number, target: number, dt: number, factor = T
   return current + (target - current) * k;
 }
 
-/** Map a deviceorientation reading to normalized tilt, compensating screen rotation. */
-export function orientationToTilt(beta: number, gamma: number, screenAngle: number): { x: number; y: number } {
+/** Raw deviceorientation angles (deg) mapped to screen axes, compensating rotation. */
+export function orientationToDegrees(beta: number, gamma: number, screenAngle: number): { x: number; y: number } {
   const a = ((screenAngle % 360) + 360) % 360;
-  // Portrait: gamma = left/right, beta = front/back (rest at ~45 deg, held in hand).
-  let x = gamma;
-  let y = beta - 45;
-  if (a === 90) { x = beta; y = -gamma - 45; }
-  else if (a === 270) { x = -beta; y = gamma - 45; }
-  else if (a === 180) { x = -gamma; y = -beta - 45; }
-  return { x: clampTilt(x / 35), y: clampTilt(y / 35) };
+  if (a === 90) return { x: beta, y: -gamma };
+  if (a === 270) return { x: -beta, y: gamma };
+  if (a === 180) return { x: -gamma, y: -beta };
+  return { x: gamma, y: beta };
+}
+
+/** Normalized tilt relative to a calibrated zero pose (default: held at 45 deg). */
+export function orientationToTilt(
+  beta: number, gamma: number, screenAngle: number, zero: { x: number; y: number } = { x: 0, y: 45 },
+): { x: number; y: number } {
+  const d = orientationToDegrees(beta, gamma, screenAngle);
+  return { x: clampTilt((d.x - zero.x) / 35), y: clampTilt((d.y - zero.y) / 35) };
+}
+
+/** Rotation target: recentre once a gyro reading has been still for GYRO_REST_MS. */
+export function tiltTarget(value: number, msSinceChange: number, restMs: number): number {
+  return msSinceChange > restMs ? 0 : clampTilt(value);
 }
 
 export type Spring = { x: number; v: number };

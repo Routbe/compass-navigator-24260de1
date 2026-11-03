@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, RotateCw, ShieldCheck, Smartphone, UserPlus, Wallet, ZoomIn, ZoomOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { filterGyro, orientationToTilt } from "./card-physics";
+import { GYRO_CALIBRATION_SAMPLES, GYRO_REST_MS, filterGyro, orientationToDegrees, orientationToTilt } from "./card-physics";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -250,14 +250,31 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
   // Gyroscope tilt (after the visitor allowed motion access on iOS).
   useEffect(() => {
     if (!open || !gyro) return;
+    // Calibrate "flat" to how the pass is held when it opens (average of the first readings).
+    const samples: { x: number; y: number }[] = [];
+    let zero: { x: number; y: number } | null = null;
+    let lastEvent = performance.now();
     const onTilt = (e: DeviceOrientationEvent) => {
-      const prev = tilt.current;
-      const dt = Math.min(0.1, (performance.now() - prev.at) / 1000 || 1 / 60);
       if (e.beta == null || e.gamma == null) return;
-      const raw = orientationToTilt(e.beta, e.gamma, window.screen.orientation?.angle ?? 0);
+      const angle = window.screen.orientation?.angle ?? 0;
+      if (!zero) {
+        samples.push(orientationToDegrees(e.beta, e.gamma, angle));
+        if (samples.length < GYRO_CALIBRATION_SAMPLES) return;
+        zero = {
+          x: samples.reduce((s, v) => s + v.x, 0) / samples.length,
+          y: samples.reduce((s, v) => s + v.y, 0) / samples.length,
+        };
+      }
+      const now = performance.now();
+      const prev = tilt.current;
+      const dt = Math.min(0.1, (now - lastEvent) / 1000 || 1 / 60);
+      lastEvent = now;
+      const raw = orientationToTilt(e.beta, e.gamma, angle, zero);
       const x = filterGyro(prev.x, raw.x, dt);
       const y = filterGyro(prev.y, raw.y, dt);
-      tilt.current = { x, y, at: performance.now() };
+      // Only a real change counts as activity; a still phone recentres after GYRO_REST_MS.
+      if (x === prev.x && y === prev.y) return;
+      tilt.current = { x, y, at: now, rest: GYRO_REST_MS };
       setFlatTilt({ x, y });
     };
     window.addEventListener("deviceorientation", onTilt);
@@ -274,8 +291,17 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
       const y = -((e.clientY / window.innerHeight) * 2 - 1);
       tilt.current = { x, y, at: performance.now() };
     };
+    // Mouse leaves the window: target eases back to centre through the same lerp.
+    const onLeave = (e: MouseEvent) => {
+      if (e.relatedTarget) return;
+      tilt.current = { x: 0, y: 0, at: performance.now() };
+    };
     window.addEventListener("pointermove", onMove, { passive: true });
-    return () => window.removeEventListener("pointermove", onMove);
+    document.addEventListener("mouseout", onLeave);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      document.removeEventListener("mouseout", onLeave);
+    };
   }, [open, gyro]);
 
   useEffect(() => {
