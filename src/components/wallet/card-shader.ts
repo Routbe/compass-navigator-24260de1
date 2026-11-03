@@ -208,7 +208,7 @@ void main() {
   col += env * fres * mix(0.09, 0.2, isGlass);
   col = mix(col, film * (0.55 + env * 0.5 + spec * 0.8), foil * (0.55 + 0.4 * (1.0 - cosV)));
   // Base layer: polycarbonate micro-scratches + cayenne guilloche as UV/intaglio ink.
-  float scratches = hash12(floor(vUv * 800.0)) * 0.04;
+  float scratches = hash12(floor(vUv * 800.0)) * 0.025;
   float cayenne = cayenneGuilloche(vUv, uTime * 0.05 * uMotion);
   col += (scratches - 0.02) * (0.4 + 0.6 * fres);
   col = mix(col, col + vec3(0.06, 0.11, 0.16) * (0.6 + 0.4 * diff), cayenne * 0.4);
@@ -218,9 +218,9 @@ void main() {
   // frequency aliases into horizontal bands across the whole face.
   float brushPhase = vUv.y * 620.0;
   float brushResolved = 1.0 - smoothstep(1.1, 3.14159, fwidth(brushPhase));
-  float brush = sin(brushPhase) * 0.02 * printable * brushResolved;
+  float brush = sin(brushPhase) * 0.035 * printable * brushResolved;
   vec3 Nb = normalize(N + vB * brush);
-  float ax = 0.42;  // stretched along the brush
+  float ax = 0.5;  // stretched along the brush
   float ay = 0.13;
   float tH = dot(H, vT);
   float bH = dot(H, vB);
@@ -230,7 +230,11 @@ void main() {
   float nL = clamp(dot(Nb, L), 0.0, 1.0);
   vec3 titanium = mix(vec3(0.78, 0.8, 0.83), vec3(0.95, 0.88, 0.74), 0.35);
   float metalZone = printable * clamp(isMetal + uAniso + mask.r * 0.5, 0.0, 1.0);
-  vec3 anisoSpec = titanium * min(ggxAniso * nL * 0.55, 1.6) * (0.6 + 0.4 * fres);
+  // Brushed structure: the fine parallel lines modulate the streak, so the metal
+  // reads as brushed rather than as one plain soft sheen.
+  float brushLines = 0.5 + 0.5 * sin(brushPhase);
+  vec3 anisoSpec = titanium * min(ggxAniso * nL * 0.55, 1.6) * (0.6 + 0.4 * fres)
+    * (0.55 + 0.9 * brushLines * brushResolved);
   col += (anisoSpec + titanium * brush * 1.5) * metalZone;
 
   // Hologram layer floats 1 mm below the polycarbonate: parallax from the
