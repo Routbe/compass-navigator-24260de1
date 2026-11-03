@@ -207,7 +207,7 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   f.globalAlpha = 1;
   // Front: compact public identity QR (social / networking).
   // Error correction H (30 %), so the centred ROUT seal (< 8 % of the area) never breaks scanning.
-  const fq = drawQr(f, card.qrValue, FRONT_QR.x, FRONT_QR.y, FRONT_QR.size, "H", FRONT_QR.quiet, 10);
+  const fq = drawQr(f, card.qrValue, FRONT_QR.x, FRONT_QR.y, FRONT_QR.size, "H", FRONT_QR.quiet, 6);
   const fqc = { x: fq.x + fq.w / 2, y: fq.y + fq.w / 2 };
   f.fillStyle = "#ffffff";
   f.beginPath();
@@ -280,7 +280,7 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   // Back: secure, rotating QR for the owner (expires with the 30 s window);
   // everyone else sees the public QR. Slim 2-module quiet zone, no extra frame.
   const secure = opts.secureQr ?? null;
-  const bq = drawQr(b, secure ?? card.qrValue, BACK_QR.x, qy, qrSize, "M", BACK_QR.quiet, 14);
+  const bq = drawQr(b, secure ?? card.qrValue, BACK_QR.x, qy, qrSize, "M", BACK_QR.quiet, 8);
   b.textAlign = "center";
   b.fillStyle = "#e4e4e7";
   const caption = secure ? "SECURE QR · 60 S · EENMALIG" : card.url.replace(/^https?:\/\//, "");

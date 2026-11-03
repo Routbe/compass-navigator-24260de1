@@ -202,7 +202,11 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
     // Reserve exactly the printed QR panel, so no unprinted rim shows around it.
     const toUv = (b: QrBox | undefined, m: THREE.ShaderMaterial) => {
       const u = m.uniforms["uQrBox"];
-      if (b && u?.value instanceof THREE.Vector4) u.value.set(b.x / FACE_W, 1 - (b.y + b.w) / FACE_H, (b.x + b.w) / FACE_W, 1 - b.y / FACE_H);
+      if (b && u?.value instanceof THREE.Vector4) {
+        // Inset past the rounded corners so the shader covers them, never bare body.
+        const i = 5;
+        u.value.set((b.x + i) / FACE_W, 1 - (b.y + b.w - i) / FACE_H, (b.x + b.w - i) / FACE_W, 1 - (b.y + i) / FACE_H);
+      }
     };
     toUv(faces.qrFront, security);
     toUv(faces.qrBack, backSecurity);
