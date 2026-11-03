@@ -73,3 +73,18 @@ describe("tilt damping and limits", () => {
     expect(t.y).toBe(1);
   });
 });
+
+import { decaySpin as _decay, isBackFace as _isBack, nearestFace as _nearest, clampDragPitch as _clampP, MAX_DRAG_PITCH as _MP } from "./card-physics";
+describe("grab spin", () => {
+  it("snaps to the nearest face", () => {
+    expect(_nearest(1.7)).toBeCloseTo(Math.PI);
+    expect(_nearest(1.5)).toBeCloseTo(0);
+    expect(_isBack(Math.PI)).toBe(true);
+    expect(_isBack(-Math.PI)).toBe(true);
+    expect(_isBack(2 * Math.PI)).toBe(false);
+  });
+  it("coasting decays and pitch is limited", () => {
+    expect(_decay(10, 1)).toBeLessThan(0.5);
+    expect(_clampP(2)).toBe(_MP);
+  });
+});

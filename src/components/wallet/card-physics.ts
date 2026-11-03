@@ -84,3 +84,23 @@ export function filterGyro(prev: number, raw: number, dt: number, cutoffHz = 6):
   const a = dt / (rc + dt);
   return prev + (raw - prev) * a;
 }
+
+/** Free grab-and-spin: release keeps coasting with friction, then snaps to a face. */
+export const SPIN_FRICTION = 3.2; // 1/s exponential decay of coasting speed
+export const SPIN_SNAP_SPEED = 1.4; // rad/s: below this the card settles on a face
+export const MAX_DRAG_PITCH = 0.6; // rad, vertical grab limit (~34 deg)
+/** Radians of spin for dragging across the full card frame width. */
+export const SPIN_PER_FRAME_WIDTH = Math.PI * 1.15;
+
+export function nearestFace(angle: number): number {
+  return Math.round(angle / Math.PI) * Math.PI;
+}
+export function isBackFace(angle: number): boolean {
+  return Math.abs(Math.round(angle / Math.PI)) % 2 === 1;
+}
+export function decaySpin(v: number, dt: number, friction = SPIN_FRICTION): number {
+  return v * Math.exp(-friction * dt);
+}
+export function clampDragPitch(p: number): number {
+  return Math.max(-MAX_DRAG_PITCH, Math.min(MAX_DRAG_PITCH, p));
+}

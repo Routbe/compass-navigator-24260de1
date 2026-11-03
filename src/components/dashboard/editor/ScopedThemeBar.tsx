@@ -5,6 +5,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { CustomizeButton } from "@/components/dashboard/DesignTabEditor";
 import { StudioChip } from "@/components/studio/StudioChip";
+import { LiquidGlassFilters, useLiquidGlassRuntime } from "@/components/glass/LiquidGlass";
 import type { ProfileDisplayPrefs } from "@/lib/profile-display";
 import {
   applyScopedPatch,
@@ -42,8 +43,9 @@ export const SCOPES: { id: ThemeScope; short: string; label: string }[] = [
 export const PROFILE_SCOPES: readonly ThemeScope[] = ["all", "links", "socials", "booking", "board", "presence", "questions"];
 
 const GLASS_TYPES: { id: Exclude<GlassStyle, "solid">; label: string }[] = [
-  { id: "frosted-light", label: "Frosted licht" },
-  { id: "frosted-dark", label: "Rookglas" },
+  { id: "frosted-light", label: "Light Glass" },
+  { id: "frosted-dark", label: "Dark Glass" },
+  { id: "neon", label: "Color Glass" },
   { id: "obsidian", label: "Liquid Obsidian" },
   { id: "prism", label: "Prism Edge" },
 ];
@@ -61,6 +63,15 @@ export const SHAPE_PRESETS: ShapePreset[] = [
   { id: "smoke-pill", label: "Rookglas Pill", buttonVariant: "fill", buttonRadius: "pill", glassStyle: "frosted-dark" },
   { id: "obsidian", label: "Obsidian", buttonVariant: "fill", buttonRadius: "xl", glassStyle: "obsidian" },
   { id: "prism", label: "Prism", buttonVariant: "outline", buttonRadius: "rounded", glassStyle: "prism" },
+  { id: "neon-glass", label: "Color Glass", buttonVariant: "fill", buttonRadius: "pill", glassStyle: "neon" },
+];
+
+/** One-click Apple glass recipes for the customize panel (style + tuned sliders). */
+const GLASS_RECIPES: { id: string; label: string; patch: ScopeOverride }[] = [
+  { id: "light", label: "Light Glass", patch: { glassStyle: "frosted-light", glassOpacity: 20, glassBlur: 20, glassSaturation: 180, glassRefraction: 40, glassAberration: 15, glassSpecular: 70, glassBorder: "bright" } },
+  { id: "dark", label: "Dark Glass", patch: { glassStyle: "frosted-dark", glassOpacity: 12, glassBlur: 22, glassSaturation: 160, glassRefraction: 35, glassAberration: 10, glassSpecular: 45, glassBorder: "subtle" } },
+  { id: "neon", label: "Color Glass", patch: { glassStyle: "neon", glassOpacity: 15, glassBlur: 18, glassSaturation: 200, glassRefraction: 50, glassAberration: 30, glassSpecular: 60, glassBorder: "subtle" } },
+  { id: "liquid", label: "Liquid Lens", patch: { glassStyle: "frosted-light", glassOpacity: 8, glassBlur: 6, glassSaturation: 190, glassRefraction: 90, glassAberration: 40, glassSpecular: 85, glassBorder: "bright" } },
 ];
 
 const glassTargetOf = (scope: ThemeScope): (keyof GlassTargets)[] =>
@@ -92,6 +103,7 @@ export function ScopedThemeBar({ prefs, setPref, scope = "all", showTypography =
   const design = resolveComponentDesign(prefs, prefs.themeOverrides, scope);
   const custom = prefs.buttonsCustom;
   const glassOn = tokens.glassStyle !== "solid";
+  useLiquidGlassRuntime();
 
   const patch = (p: ScopeOverride) => {
     if (p.glassStyle && p.glassStyle !== "solid") {
@@ -120,8 +132,10 @@ export function ScopedThemeBar({ prefs, setPref, scope = "all", showTypography =
   const radii = BUTTON_RADII.filter((r) => (OVERRIDE_BUTTON_RADII as readonly string[]).includes(r.id));
   const sample = glassSurfaceStyle(tokens, scope === "all" ? "links" : (scope as Exclude<ThemeScope, "all">), { links: true, presence: true, board: true, booking: true });
 
+  const lensTokens = [tokens, ...GLASS_RECIPES.map((g) => ({ ...tokens, ...g.patch }))];
   return (
     <section className="space-y-4">
+      <LiquidGlassFilters tokens={lensTokens} />
       {scope !== "all" && (
         <div className="flex flex-wrap items-center gap-2">
           {unique ? (
@@ -142,15 +156,33 @@ export function ScopedThemeBar({ prefs, setPref, scope = "all", showTypography =
         </div>
         {!custom && (
           <div className="flex flex-wrap gap-1.5">
-            {SHAPE_PRESETS.map((sp) => (
+            {SHAPE_PRESETS.filter((sp) => sp.glassStyle === "solid").map((sp) => (
               <StudioChip
                 key={sp.id}
                 active={design.buttonVariant === sp.buttonVariant && design.buttonRadius === sp.buttonRadius && tokens.glassStyle === sp.glassStyle}
                 onClick={() => patch({ buttonVariant: sp.buttonVariant, buttonRadius: sp.buttonRadius, glassStyle: sp.glassStyle })}
               >
-                {sp.label}{sp.glassStyle !== "solid" && <span aria-hidden className="text-[10px] opacity-70">◇</span>}
+                {sp.label}
               </StudioChip>
             ))}
+          </div>
+        )}
+        {!custom && (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {SHAPE_PRESETS.filter((sp) => sp.glassStyle !== "solid").map((sp) => {
+              const active = design.buttonVariant === sp.buttonVariant && design.buttonRadius === sp.buttonRadius && tokens.glassStyle === sp.glassStyle;
+              const look = glassSurfaceStyle({ ...tokens, glassStyle: sp.glassStyle }, "links", ALL_TARGETS);
+              return (
+                <button key={sp.id} type="button" aria-pressed={active}
+                  onClick={() => patch({ buttonVariant: sp.buttonVariant, buttonRadius: sp.buttonRadius, glassStyle: sp.glassStyle })}
+                  className={`relative overflow-hidden rounded-xl p-2.5 text-left transition-shadow ${active ? "ring-2 ring-primary" : "ring-1 ring-border"}`}>
+                  <GlassBackdrop />
+                  <span className={`relative block px-3 py-2 text-center text-xs font-medium ${RADIUS_CLASS[sp.buttonRadius ?? "xl"]}`} style={look ?? undefined}>
+                    <span className={sp.glassStyle === "frosted-light" || sp.glassStyle === "prism" ? "text-foreground" : "text-primary-foreground"}>{sp.label}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -200,16 +232,30 @@ export function ScopedThemeBar({ prefs, setPref, scope = "all", showTypography =
               <Switch checked={glassOn} onCheckedChange={(v) => patch({ glassStyle: v ? "frosted-light" : "solid" })} />
             </label>
             {glassOn && <>
+              <Group label="Recept">
+                {GLASS_RECIPES.map((g) => <StudioChip key={g.id} active={(Object.keys(g.patch) as (keyof ScopeOverride)[]).every((k) => tokens[k as keyof typeof tokens] === g.patch[k])} onClick={() => patch(g.patch)}>{g.label}</StudioChip>)}
+              </Group>
               <Group label="Soort glas">
                 {GLASS_TYPES.map((g) => <StudioChip key={g.id} active={tokens.glassStyle === g.id} onClick={() => patch({ glassStyle: g.id })}>{g.label}</StudioChip>)}
               </Group>
-              <div className="rounded-xl bg-[linear-gradient(135deg,var(--primary),var(--accent))] p-4">
-                <div className="rounded-xl px-4 py-3 text-center text-sm font-medium text-primary-foreground" style={sample ?? undefined}>Voorbeeld</div>
+              <div className="relative overflow-hidden rounded-2xl p-5">
+                <GlassBackdrop detailed />
+                <div className="relative space-y-2.5">
+                  {["Mijn website", "Boek een afspraak"].map((label) => (
+                    <div key={label} className={`px-4 py-3 text-center text-sm font-medium ${RADIUS_CLASS[design.buttonRadius ?? "xl"]} ${tokens.glassStyle === "frosted-light" || tokens.glassStyle === "prism" ? "text-foreground" : "text-primary-foreground"}`} style={sample ?? undefined}>{label}</div>
+                  ))}
+                </div>
+                <p className="relative mt-3 text-center text-[11px] text-primary-foreground/80">Beweeg je muis of vinger over de knoppen</p>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2"><p className="input-label">Transparantie ({tokens.glassOpacity}%)</p><Slider min={5} max={50} step={1} value={[tokens.glassOpacity]} onValueChange={([v]) => patch({ glassOpacity: v ?? tokens.glassOpacity })} /></div>
-                <div className="space-y-2"><p className="input-label">Vervaging ({tokens.glassBlur}px)</p><Slider min={4} max={32} step={1} value={[tokens.glassBlur]} onValueChange={([v]) => patch({ glassBlur: v ?? tokens.glassBlur })} /></div>
+                <GlassSlider label="Transparantie" unit="%" min={5} max={50} value={tokens.glassOpacity} onChange={(v) => patch({ glassOpacity: v })} />
+                <GlassSlider label="Vervaging" unit="px" min={4} max={32} value={tokens.glassBlur} onChange={(v) => patch({ glassBlur: v })} />
+                <GlassSlider label="Kleurverzadiging" unit="%" min={100} max={200} value={tokens.glassSaturation} onChange={(v) => patch({ glassSaturation: v })} />
+                <GlassSlider label="Lichtbreking" unit="" min={0} max={100} value={tokens.glassRefraction} onChange={(v) => patch({ glassRefraction: v })} />
+                <GlassSlider label="Prismarand" unit="" min={0} max={50} value={tokens.glassAberration} format={(v) => (v / 10).toFixed(1)} onChange={(v) => patch({ glassAberration: v })} />
+                <GlassSlider label="Glans" unit="%" min={0} max={100} value={tokens.glassSpecular} onChange={(v) => patch({ glassSpecular: v })} />
               </div>
+              <p className="text-[11px] text-muted-foreground">Lichtbreking en prismarand tonen in Chrome, Edge en Android. Safari en Firefox tonen het matglas zonder breking.</p>
               <Group label="Rand">
                 {BORDERS.map((b) => <StudioChip key={b.id} active={tokens.glassBorder === b.id} onClick={() => patch({ glassBorder: b.id })}>{b.label}</StudioChip>)}
               </Group>
@@ -235,6 +281,33 @@ export function ScopedThemeBar({ prefs, setPref, scope = "all", showTypography =
         </div>
       )}
     </section>
+  );
+}
+
+const ALL_TARGETS: GlassTargets = { links: true, presence: true, board: true, booking: true };
+const RADIUS_CLASS: Record<string, string> = { pill: "rounded-full", xl: "rounded-2xl", rounded: "rounded-xl", soft: "rounded-lg", sharp: "rounded-none" };
+
+/** Vivid, detailed backdrop so blur, saturation and refraction are visible. */
+function GlassBackdrop({ detailed = false }: { detailed?: boolean }) {
+  return (
+    <div aria-hidden className="absolute inset-0 bg-[linear-gradient(135deg,var(--primary),var(--accent))]">
+      <div className="absolute -left-4 top-1 h-16 w-16 rounded-full bg-primary-foreground/70" />
+      <div className="absolute right-3 bottom-0 h-12 w-24 rotate-12 rounded-lg bg-accent-foreground/60" />
+      {detailed && <>
+        <div className="absolute left-1/3 top-1/3 h-20 w-20 rounded-full bg-[conic-gradient(var(--primary),var(--accent),var(--primary-foreground),var(--primary))]" />
+        <div className="absolute inset-x-0 top-1/2 text-center text-4xl font-black tracking-tight text-primary-foreground/60">ROUT</div>
+        <div className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent_0_14px,color-mix(in_oklab,var(--primary-foreground)_25%,transparent)_14px_16px)]" />
+      </>}
+    </div>
+  );
+}
+
+function GlassSlider({ label, unit, min, max, value, onChange, format }: { label: string; unit: string; min: number; max: number; value: number; onChange: (v: number) => void; format?: (v: number) => string }) {
+  return (
+    <div className="space-y-2">
+      <p className="input-label">{label} ({format ? format(value) : value}{unit})</p>
+      <Slider min={min} max={max} step={1} value={[value]} onValueChange={([v]) => onChange(v ?? value)} />
+    </div>
   );
 }
 

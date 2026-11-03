@@ -1417,3 +1417,6 @@ select:focus-visible {
   --card-security-ink-platinum: #c6d4d9;
   --card-security-chip-metal: #c4ab70;
 }
+
+/* Liquid Glass lens: promoted only where SVG backdrop filters render (see LiquidGlass.tsx). */
+html[data-liquid] [style*="--lg-filter"] { backdrop-filter: var(--lg-filter) !important; }

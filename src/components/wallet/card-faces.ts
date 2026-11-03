@@ -15,7 +15,7 @@ export const FACE_H = Math.round(FACE_W * CARD_RATIO);
  * front/back: printed artwork. mask (WebGL only): R = holographic foil
  * (emblem, ring, frame), G = latent kinegram watermark, B = emboss height.
  */
-export type CardFaces = { front: HTMLCanvasElement; back: HTMLCanvasElement; mask: HTMLCanvasElement };
+export type CardFaces = { front: HTMLCanvasElement; back: HTMLCanvasElement; mask: HTMLCanvasElement; qrFront?: QrBox; qrBack?: QrBox };
 
 function shade(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -43,20 +43,39 @@ function fitText(ctx: CanvasRenderingContext2D, text: string, max: number, size:
   } while (ctx.measureText(text).width > max && s > 14);
 }
 
-/** Crisp QR modules with a 4-module quiet zone; error correction M. */
-export function drawQr(ctx: CanvasRenderingContext2D, value: string, x: number, y: number, size: number, ecc: "M" | "H" = "M") {
+/** Printed QR placement (canvas px): the white panel is exactly the QR + quiet zone. */
+export const FRONT_QR = { x: 28, y: FACE_H - 188, size: 160, quiet: 2 } as const;
+export const BACK_QR = { x: 80, y: Math.round(FACE_H * 0.13), size: FACE_W - 160, quiet: 2 } as const;
+export type QrBox = { x: number; y: number; w: number };
+
+/** Exact panel rectangle drawQr will paint for a layout (for shader reserve masks). */
+export function qrPanel(value: string, l: { x: number; y: number; size: number; quiet: number }, ecc: "M" | "H"): QrBox {
+  const qr = qrcode(0, ecc);
+  qr.addData(value);
+  qr.make();
+  const n = qr.getModuleCount() + l.quiet * 2;
+  const cell = Math.floor(l.size / n);
+  const w = cell * n;
+  return { x: l.x + Math.floor((l.size - w) / 2), y: l.y + Math.floor((l.size - w) / 2), w };
+}
+
+/** Crisp QR modules on a white rounded panel; quiet zone in modules (ISO min 4, 2 is reliable on a uniform surround). */
+export function drawQr(ctx: CanvasRenderingContext2D, value: string, x: number, y: number, size: number, ecc: "M" | "H" = "M", quiet = 4, radius = 0): QrBox {
   const qr = qrcode(0, ecc);
   qr.addData(value);
   qr.make();
   const n = qr.getModuleCount();
-  const cell = Math.floor(size / (n + 8));
-  const total = cell * (n + 8);
+  const cell = Math.floor(size / (n + quiet * 2));
+  const total = cell * (n + quiet * 2);
   const ox = x + Math.floor((size - total) / 2);
   const oy = y + Math.floor((size - total) / 2);
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(ox, oy, total, total);
+  ctx.beginPath();
+  ctx.roundRect(ox, oy, total, total, radius);
+  ctx.fill();
   ctx.fillStyle = "#000000";
-  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) ctx.fillRect(ox + (c + 4) * cell, oy + (r + 4) * cell, cell, cell);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) ctx.fillRect(ox + (c + quiet) * cell, oy + (r + quiet) * cell, cell, cell);
+  return { x: ox, y: oy, w: total };
 }
 
 /** The six-point ROUT seal used as the holographic emblem. */
@@ -187,18 +206,15 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   f.fillText(card.url.replace(/^https?:\/\//, ""), cx, FACE_H - 56);
   f.globalAlpha = 1;
   // Front: compact public identity QR (social / networking).
+  // Error correction H (30 %), so the centred ROUT seal (< 8 % of the area) never breaks scanning.
+  const fq = drawQr(f, card.qrValue, FRONT_QR.x, FRONT_QR.y, FRONT_QR.size, "H", FRONT_QR.quiet, 6);
+  const fqc = { x: fq.x + fq.w / 2, y: fq.y + fq.w / 2 };
   f.fillStyle = "#ffffff";
   f.beginPath();
-  f.roundRect(36, FACE_H - 152, 112, 112, 14);
-  f.fill();
-  // Error correction H (30 %), so the centred ROUT seal never breaks scanning.
-  drawQr(f, card.qrValue, 40, FACE_H - 148, 104, "H");
-  f.fillStyle = "#ffffff";
-  f.beginPath();
-  f.arc(92, FACE_H - 96, 13, 0, Math.PI * 2);
+  f.arc(fqc.x, fqc.y, fq.w * 0.1, 0, Math.PI * 2);
   f.fill();
   f.fillStyle = "#111111";
-  drawEmblem(f, 92, FACE_H - 96, 9);
+  drawEmblem(f, fqc.x, fqc.y, fq.w * 0.07);
 
   // Emblem bottom-right of the portrait, printed faintly; the foil does the rest.
   const ex = FACE_W - 92;
@@ -259,16 +275,12 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
     b.arc(FACE_W - 76, 66, 10 + i * 10, -Math.PI / 4, Math.PI / 4);
     b.stroke();
   }
-  const qrSize = FACE_W - 176;
-  const qy = Math.round(FACE_H * 0.13);
-  b.fillStyle = "#ffffff";
-  b.beginPath();
-  b.roundRect(88 - 12, qy - 12, qrSize + 24, qrSize + 24, 24);
-  b.fill();
+  const qrSize = BACK_QR.size;
+  const qy = BACK_QR.y;
   // Back: secure, rotating QR for the owner (expires with the 30 s window);
-  // everyone else sees the public QR.
+  // everyone else sees the public QR. Slim 2-module quiet zone, no extra frame.
   const secure = opts.secureQr ?? null;
-  drawQr(b, secure ?? card.qrValue, 88, qy, qrSize);
+  const bq = drawQr(b, secure ?? card.qrValue, BACK_QR.x, qy, qrSize, "M", BACK_QR.quiet, 8);
   b.textAlign = "center";
   b.fillStyle = "#e4e4e7";
   const caption = secure ? "SECURE QR · 60 S · EENMALIG" : card.url.replace(/^https?:\/\//, "");
@@ -295,7 +307,7 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   lines.forEach((line, row) => {
     for (let c = 0; c < line.length; c++) b.fillText(line.charAt(c), 32 + c * cw, mrzTop + 42 + row * 38);
   });
-  return { front, back, mask };
+  return { front, back, mask, qrFront: fq, qrBack: bq };
 }
 
 export function hasWebGL(): boolean {

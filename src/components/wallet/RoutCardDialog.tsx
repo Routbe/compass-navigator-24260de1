@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, RotateCw, ShieldCheck, Smartphone, UserPlus, Wallet, ZoomIn, ZoomOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { GYRO_CALIBRATION_SAMPLES, GYRO_REST_MS, filterGyro, orientationToDegrees, orientationToTilt } from "./card-physics";
+import { GYRO_CALIBRATION_SAMPLES, GYRO_REST_MS, filterGyro, orientationToDegrees, orientationToTilt, SPIN_PER_FRAME_WIDTH } from "./card-physics";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,7 +18,7 @@ import { SECURE_ROTATE_MS } from "@/lib/wallet/card-token";
 import { CardKeysPanel } from "./CardKeysPanel";
 import type { WalletStatus } from "@/lib/wallet/wallet-pass";
 import { drawCardFaces, hasWebGL, type CardFaces } from "./card-faces";
-import type { CardFinish, LiveRef, SecureRef, TiltRef, ZoomRef } from "./RoutCard3D";
+import type { CardFinish, LiveRef, SecureRef, TiltRef, ZoomRef, DragRef } from "./RoutCard3D";
 
 const RoutCard3D = lazy(() => import("./RoutCard3D"));
 
@@ -76,6 +76,8 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
   const [flatTilt, setFlatTilt] = useState({ x: 0, y: 0 });
   const live: LiveRef = useRef({ seed: [0.5, 0.5, 0.5, 0.5], expiresAt: 0, windowMs: 30_000 });
   const zoom: ZoomRef = useRef(0);
+  const drag: DragRef = useRef({ down: false, dx: 0, dy: 0 });
+  const grab = useRef<{ id: number; x: number; y: number } | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const [code, setCode] = useState<string | null>(null);
   const [secureUrl, setSecureUrl] = useState<string | null>(null);
@@ -318,8 +320,29 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
     }
   };
 
+  const onGrab = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    grab.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    drag.current.down = true;
+  }, []);
+  const onRelease = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (grab.current?.id !== e.pointerId) return;
+    grab.current = null;
+    drag.current.down = false;
+    tilt.current = { ...tilt.current, at: performance.now() };
+  }, []);
   const onPointer = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
+    const g = grab.current;
+    if (g && g.id === e.pointerId) {
+      drag.current.dx += ((e.clientX - g.x) / r.width) * SPIN_PER_FRAME_WIDTH;
+      drag.current.dy += ((e.clientY - g.y) / r.height) * 1.2;
+      g.x = e.clientX;
+      g.y = e.clientY;
+      tilt.current = { ...tilt.current, at: performance.now() };
+      return;
+    }
     const x = ((e.clientX - r.left) / r.width) * 2 - 1;
     const y = -(((e.clientY - r.top) / r.height) * 2 - 1);
     tilt.current = { x, y, at: performance.now() };
@@ -408,6 +431,10 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
         <div
           className="relative h-[420px] w-full touch-none select-none overflow-hidden rounded-2xl bg-gradient-to-b from-muted/40 to-muted"
           onPointerMove={onPointer}
+          onPointerDown={onGrab}
+          onPointerUp={onRelease}
+          onPointerCancel={onRelease}
+          style={{ cursor: "grab" }}
           data-scene-ready={ready ? "true" : undefined}
         >
           {card === null ? (
@@ -427,6 +454,8 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
                   live={live}
                   zoom={zoom}
                   onFlip={flip}
+                  drag={drag}
+                  onFace={setFlipped}
                   onReady={() => setReady(true)}
                   text={{ displayName: styledCard!.displayName, handle: card!.handle, subheader: styledCard && "regionDisplay" in styledCard && styledCard.regionDisplay ? styledCard.regionDisplay : card!.subheader, fg: styledCard!.hexForegroundColor, sovereignId: card!.sovereignId, code }}
                 />

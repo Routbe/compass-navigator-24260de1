@@ -39,3 +39,23 @@ describe("scoped theme engine", () => {
     expect(scopeOfBlockKind("link")).toBe("links");
   });
 });
+
+import { liquidFilterId as _lfid, normalizeGlassTokens as _ngt, glassSurfaceStyle as _gss, DEFAULT_GLASS as _DG } from "@/lib/theme-engine";
+describe("liquid glass tokens", () => {
+  it("clamps the new sliders", () => {
+    const t = _ngt({ glassSaturation: 500, glassRefraction: -4, glassAberration: 99, glassSpecular: 50 });
+    expect(t.glassSaturation).toBe(200);
+    expect(t.glassRefraction).toBe(0);
+    expect(t.glassAberration).toBe(50);
+  });
+  it("no lens filter when refraction and aberration are zero", () => {
+    expect(_lfid({ glassRefraction: 0, glassAberration: 0 })).toBeNull();
+    expect(_lfid({ glassRefraction: 42, glassAberration: 18 })).toBe("rout-lg-r40-a20");
+  });
+  it("uses the Apple shadow, saturation and 0.4s easing", () => {
+    const s = _gss({ ..._DG, glassStyle: "frosted-light", glassBlur: 20, glassSaturation: 180 }, "links", { links: true, presence: true, board: true, booking: true })!;
+    expect(s.backdropFilter).toBe("blur(20px) saturate(180%)");
+    expect(s.boxShadow).toContain("0 8px 32px 0 rgba(0, 0, 0, 0.15)");
+    expect(s.transition).toBe("all 0.4s cubic-bezier(0.16, 1, 0.3, 1)");
+  });
+});

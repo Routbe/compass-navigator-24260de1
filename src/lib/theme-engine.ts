@@ -11,7 +11,7 @@ export type ThemeScope = (typeof THEME_SCOPES)[number];
 export type ComponentScope = Exclude<ThemeScope, "all">;
 export const COMPONENT_SCOPES: ComponentScope[] = ["links", "booking", "board", "presence", "socials", "questions", "answers"];
 
-export const GLASS_STYLES = ["solid", "frosted-light", "frosted-dark", "obsidian", "prism"] as const;
+export const GLASS_STYLES = ["solid", "frosted-light", "frosted-dark", "obsidian", "prism", "neon"] as const;
 export type GlassStyle = (typeof GLASS_STYLES)[number];
 export const GLASS_BORDERS = ["subtle", "bright", "off"] as const;
 export type GlassBorder = (typeof GLASS_BORDERS)[number];
@@ -23,6 +23,14 @@ export type GlassTokens = {
   /** Blur radius in px, 4–32. */
   glassBlur: number;
   glassBorder: GlassBorder;
+  /** Backdrop saturation in percent, 100–200. */
+  glassSaturation: number;
+  /** Liquid lens refraction at the rim, 0–100 (Chromium; others keep blur only). */
+  glassRefraction: number;
+  /** Prismatic RGB split at the rim, 0–50 (= 0.0–5.0). */
+  glassAberration: number;
+  /** Specular rim + pointer highlight strength, 0–100. */
+  glassSpecular: number;
 };
 
 export type GlassTargets = Record<"links" | "presence" | "board" | "booking", boolean>;
@@ -65,6 +73,10 @@ export const DEFAULT_GLASS: GlassTokens = {
   glassOpacity: 12,
   glassBlur: 16,
   glassBorder: "subtle",
+  glassSaturation: 180,
+  glassRefraction: 40,
+  glassAberration: 20,
+  glassSpecular: 60,
 };
 export const DEFAULT_GLASS_TARGETS: GlassTargets = { links: true, presence: true, board: true, booking: true };
 
@@ -81,6 +93,10 @@ export function normalizeGlassTokens(r: Record<string, unknown>): GlassTokens {
     glassOpacity: clamp(r["glassOpacity"], 5, 50, DEFAULT_GLASS.glassOpacity),
     glassBlur: clamp(r["glassBlur"], 4, 32, DEFAULT_GLASS.glassBlur),
     glassBorder: pick(r["glassBorder"], GLASS_BORDERS, DEFAULT_GLASS.glassBorder),
+    glassSaturation: clamp(r["glassSaturation"], 100, 200, DEFAULT_GLASS.glassSaturation),
+    glassRefraction: clamp(r["glassRefraction"], 0, 100, DEFAULT_GLASS.glassRefraction),
+    glassAberration: clamp(r["glassAberration"], 0, 50, DEFAULT_GLASS.glassAberration),
+    glassSpecular: clamp(r["glassSpecular"], 0, 100, DEFAULT_GLASS.glassSpecular),
   };
 }
 
@@ -101,6 +117,10 @@ function normalizePartial(raw: unknown): ScopeOverride {
   if (r["glassOpacity"] !== undefined) out.glassOpacity = clamp(r["glassOpacity"], 5, 50, DEFAULT_GLASS.glassOpacity);
   if (r["glassBlur"] !== undefined) out.glassBlur = clamp(r["glassBlur"], 4, 32, DEFAULT_GLASS.glassBlur);
   if (GLASS_BORDERS.includes(r["glassBorder"] as GlassBorder)) out.glassBorder = r["glassBorder"] as GlassBorder;
+  if (r["glassSaturation"] !== undefined) out.glassSaturation = clamp(r["glassSaturation"], 100, 200, DEFAULT_GLASS.glassSaturation);
+  if (r["glassRefraction"] !== undefined) out.glassRefraction = clamp(r["glassRefraction"], 0, 100, DEFAULT_GLASS.glassRefraction);
+  if (r["glassAberration"] !== undefined) out.glassAberration = clamp(r["glassAberration"], 0, 50, DEFAULT_GLASS.glassAberration);
+  if (r["glassSpecular"] !== undefined) out.glassSpecular = clamp(r["glassSpecular"], 0, 100, DEFAULT_GLASS.glassSpecular);
   return out;
 }
 
@@ -191,10 +211,26 @@ function targetOf(scope: ComponentScope): keyof GlassTargets {
   return scope === "socials" ? "links" : scope;
 }
 
+/** Shared easing for every glass change (preset switch, slider drag). */
+export const GLASS_TRANSITION = "all 0.4s cubic-bezier(0.16, 1, 0.3, 1)";
+
+/**
+ * SVG filter id for the liquid lens; the matching <filter> is rendered by
+ * `LiquidGlassFilters`. Values are quantised so sliders reuse a few filters.
+ */
+export function liquidFilterId(t: Pick<GlassTokens, "glassRefraction" | "glassAberration">): string | null {
+  const r = Math.round(t.glassRefraction / 5) * 5;
+  const a = Math.round(t.glassAberration / 5) * 5;
+  return r === 0 && a === 0 ? null : `rout-lg-r${r}-a${a}`;
+}
+
 /**
  * Inline CSS for a glass surface, or null for solid / disabled targets.
- * The background alone stays readable when backdrop-filter is unsupported;
- * the `.rout-glass` class adds an opaque fallback via @supports in styles.css.
+ * Apple recipe: blur + saturate backdrop, a hairline specular edge and a soft
+ * diffuse shadow. The liquid lens (SVG refraction + RGB split) travels in the
+ * `--lg-filter` custom property and is only promoted to `backdrop-filter` by
+ * styles.css on engines that render SVG backdrop filters (html[data-liquid]);
+ * every other browser keeps the plain blur, never a broken filter.
  */
 export function glassSurfaceStyle(
   tokens: GlassTokens,
@@ -203,34 +239,53 @@ export function glassSurfaceStyle(
 ): Record<string, string> | null {
   if (tokens.glassStyle === "solid" || !targets[targetOf(scope)]) return null;
   const a = tokens.glassOpacity / 100;
-  const dark = tokens.glassStyle === "frosted-dark" || tokens.glassStyle === "obsidian";
-  const bg = tokens.glassStyle === "obsidian"
+  const spec = tokens.glassSpecular / 100;
+  const style = tokens.glassStyle;
+  const dark = style === "frosted-dark" || style === "obsidian";
+  const bg = style === "obsidian"
     ? `rgba(8, 8, 12, ${Math.min(0.85, a + 0.35).toFixed(2)})`
-    : dark
-      ? `rgba(0, 0, 0, ${Math.min(0.85, a + 0.2).toFixed(2)})`
-      : `rgba(255, 255, 255, ${a.toFixed(2)})`;
-  const edge = tokens.glassBorder === "off" ? 0 : tokens.glassBorder === "bright" ? 0.32 : 0.18;
-  const top = tokens.glassBorder === "off" ? 0 : tokens.glassBorder === "bright" ? 0.55 : 0.35;
-  const filter = `blur(${tokens.glassBlur}px) saturate(180%)`;
-  const style: Record<string, string> = {
-    background: bg,
-    backdropFilter: filter,
-    WebkitBackdropFilter: filter,
-    border: edge ? `1px solid rgba(255, 255, 255, ${edge})` : "1px solid transparent",
-    borderTop: top ? `1px solid rgba(255, 255, 255, ${top})` : "1px solid transparent",
-    boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.1)",
+    : style === "neon"
+      ? `color-mix(in oklab, var(--primary) ${Math.round(Math.max(a, 0.15) * 100)}%, transparent)`
+      : dark
+        ? `rgba(15, 15, 15, ${Math.min(0.85, a + 0.38).toFixed(2)})`
+        : `rgba(255, 255, 255, ${Math.min(0.5, a + 0.08).toFixed(2)})`;
+  const edgeBase = tokens.glassBorder === "off" ? 0 : tokens.glassBorder === "bright" ? 0.55 : 0.4;
+  const edge = dark ? edgeBase * 0.45 : edgeBase;
+  const top = tokens.glassBorder === "off" ? 0 : Math.min(0.85, edgeBase + 0.2);
+  const blur = `blur(${tokens.glassBlur}px) saturate(${tokens.glassSaturation}%)`;
+  const lens = liquidFilterId(tokens);
+  // Specular sheen follows the pointer (--lg-x/--lg-y set by useLiquidPointer).
+  const sheen = `radial-gradient(120% 140% at var(--lg-x, 30%) var(--lg-y, -20%), rgba(255,255,255,${(spec * (dark ? 0.22 : 0.38)).toFixed(3)}), rgba(255,255,255,0) 55%)`;
+  const css: Record<string, string> = {
+    background: `${sheen}, ${bg}`,
+    backdropFilter: blur,
+    WebkitBackdropFilter: blur,
+    border: edge ? `1px solid ${dark ? `rgba(0, 0, 0, ${(edge + 0.2).toFixed(2)})` : `rgba(255, 255, 255, ${edge.toFixed(2)})`}` : "1px solid transparent",
+    borderTop: top ? `1px solid rgba(255, 255, 255, ${top.toFixed(2)})` : "1px solid transparent",
+    boxShadow: [
+      "0 8px 32px 0 rgba(0, 0, 0, 0.15)",
+      `inset 0 1px 0 0 rgba(255, 255, 255, ${(spec * 0.7).toFixed(3)})`,
+      `inset 0 -1px 0 0 rgba(255, 255, 255, ${(spec * 0.12).toFixed(3)})`,
+      `inset 0 0 ${Math.round(6 + spec * 14)}px 0 rgba(255, 255, 255, ${(spec * (dark ? 0.06 : 0.14)).toFixed(3)})`,
+    ].join(", "),
+    transition: GLASS_TRANSITION,
     willChange: "transform",
   };
-  if (tokens.glassStyle === "obsidian") {
-    style["boxShadow"] = "0 10px 40px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.06)";
+  if (lens) css["--lg-filter"] = `url(#${lens}) ${blur}`;
+  if (style === "obsidian") {
+    css["boxShadow"] = `0 10px 40px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, ${(0.1 + spec * 0.25).toFixed(3)}), inset 0 0 0 1px rgba(255, 255, 255, 0.06)`;
   }
-  if (tokens.glassStyle === "prism") {
-    style["border"] = "1px solid transparent";
-    style["borderTop"] = "1px solid transparent";
-    style["background"] =
-      `linear-gradient(${bg}, ${bg}) padding-box, linear-gradient(135deg, rgba(255,120,200,.7), rgba(120,200,255,.7), rgba(180,255,160,.7)) border-box`;
+  if (style === "neon") {
+    css["boxShadow"] = `0 8px 32px -6px color-mix(in oklab, var(--primary) 45%, transparent), inset 0 1px 0 0 rgba(255, 255, 255, ${(spec * 0.6).toFixed(3)})`;
+    css["border"] = "1px solid color-mix(in oklab, var(--primary) 55%, transparent)";
   }
-  return style;
+  if (style === "prism") {
+    css["border"] = "1px solid transparent";
+    css["borderTop"] = "1px solid transparent";
+    css["background"] =
+      `${sheen} padding-box, linear-gradient(${bg}, ${bg}) padding-box, linear-gradient(135deg, rgba(255,120,200,.7), rgba(120,200,255,.7), rgba(180,255,160,.7)) border-box`;
+  }
+  return css;
 }
 
 /** Maps a profile block kind to the theme scope that styles it. */
