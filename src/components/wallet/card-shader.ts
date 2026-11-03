@@ -331,8 +331,8 @@ void main() {
   float laser = pow(clamp(dot(Rc, L), 0.0, 1.0), 24.0);
   col += prism * rimBand * grazing * (0.6 + 3.0 * laser);
 
-  // TEMP DIAGNOSTIC: R = brushResolved, G = brush (offset+scaled), B = local view Y
-  col = vec3(clamp(brushResolved, 0.0, 1.0), clamp((brush + 0.025) * 20.0, 0.0, 1.0), clamp(dot(V, vB) * 0.5 + 0.5, 0.0, 1.0));
+  // TEMP DIAGNOSTIC: R = vUv.x, G = vUv.y, B = fwidth(vUv.y) * 200
+  col = vec3(clamp(vUv.x, 0.0, 1.0), clamp(vUv.y, 0.0, 1.0), clamp(fwidth(vUv.y) * 200.0, 0.0, 1.0));
   // Ordered dither: the printed canvas gradient is only 8-bit, so without this
   // the dark background quantises into visible bands.
   float dither = hash12(gl_FragCoord.xy + uSeed.xy * 256.0) - 0.5;
