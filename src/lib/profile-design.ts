@@ -120,6 +120,10 @@ export interface ProfileDesignPrefs {
   glassOpacity: number;
   glassBlur: number;
   glassBorder: GlassTokens["glassBorder"];
+  glassSaturation: number;
+  glassRefraction: number;
+  glassAberration: number;
+  glassSpecular: number;
   glassTargets: GlassTargets;
   /** Per-component overrides (theme.overrides[scope]). */
   themeOverrides: ThemeOverrides;
