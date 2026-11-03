@@ -28,3 +28,8 @@
 - [ ] Apply reviewed card storage migrations — blocked by required owner review of 0198/0199/0200/0201 under source-import boundaries; Neon has the account prerequisites but no card tables. Existing user_sessions must not be recreated.
 - [ ] Verify physical pairing end to end — blocked by factory inventory, separate activation proof, compatible card/device and a configured ROUT sign-in session.
 - [ ] Verify secure QR replay/freeze storage and terminal challenge-response end to end — blocked by reviewed card storage and terminal integration; source primitives are not a deployed hardware system.
+# Card feel & Studio glass (Nov 2026)
+- [ ] Grab-and-spin card rotation with momentum and face snap.
+- [ ] Native-resolution card rendering (DPR up to 3, max anisotropy).
+- [ ] Studio Liquid Glass buttons: refraction, aberration, saturation, specular, light/dark/neon presets, smooth transitions.
+- [ ] Fluid text / dissolve / MSDF typography effects — later phase.
