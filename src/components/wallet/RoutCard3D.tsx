@@ -10,7 +10,7 @@ import { Environment, Lightformer, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { configureTextBuilder } from "troika-three-text";
 import { CARD_RATIO, FACE_H, FACE_W, type CardFaces } from "./card-faces";
-import { MAX_TILT_RAD, clampTilt, lerpDamp, stepSpring, tiltTarget, type Spring } from "./card-physics";
+import { MAX_TILT_RAD, SPIN_SNAP_SPEED, clampDragPitch, clampTilt, decaySpin, isBackFace, lerpDamp, nearestFace, stepSpring, tiltTarget, type Spring } from "./card-physics";
 import { createSecurityMaterial } from "./card-shader";
 
 // Troika's nested blob importScripts conflicts with our strict script-src.
@@ -22,6 +22,8 @@ export type CardFinish = "metal" | "glass" | "holo" | "junior";
 export type TiltRef = { current: { x: number; y: number; at: number; rest?: number } };
 export type LiveRef = { current: { seed: [number, number, number, number]; expiresAt: number; windowMs: number } };
 export type ZoomRef = { current: number };
+/** Grab input: dx/dy are radians accumulated since the last frame (consumed by the card). */
+export type DragRef = { current: { down: boolean; dx: number; dy: number } };
 
 const W = 1;
 const H = CARD_RATIO;
@@ -102,6 +104,9 @@ type CardProps = {
   zoom: ZoomRef;
   secure?: SecureRef;
   onFlip: () => void;
+  drag?: DragRef;
+  /** Called when a grab-spin settles on the other face. */
+  onFace?: (back: boolean) => void;
   text: { displayName: string; handle: string; subheader: string; fg: string; sovereignId: string; code: string | null };
 };
 
@@ -143,7 +148,7 @@ function MicroBorder({ color, onSync }: { color: string; onSync: (side: number) 
   ))}</>;
 }
 
-function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, text, glyphs }: CardProps & { glyphs: MutableRefObject<Set<string>> }) {
+function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, drag, onFace, text, glyphs }: CardProps & { glyphs: MutableRefObject<Set<string>> }) {
   const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -160,8 +165,18 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
   const group = useRef<THREE.Group>(null);
   const watermark = useRef<THREE.Group>(null);
   const timer = useRef<THREE.Mesh>(null);
-  const motion = useRef({ idle: 0, flip: 0, z: CAMERA_FAR, yaw: { x: 0, v: 0 } as Spring, pitch: { x: 0, v: 0 } as Spring, tx: 0, ty: 0 });
+  const motion = useRef({ idle: 0, flip: 0, spinV: 0, snap: 0 as number | null, dragPitch: 0, z: CAMERA_FAR, yaw: { x: 0, v: 0 } as Spring, pitch: { x: 0, v: 0 } as Spring, tx: 0, ty: 0 });
   const camera = useThree((s) => s.camera);
+  const maxAniso = useThree((s) => s.gl.capabilities.getMaxAnisotropy());
+  // Face the card shows; external flips (button/tap) add half a turn from wherever it is.
+  const face = useRef(flipped);
+  useEffect(() => {
+    if (flipped === face.current) return;
+    face.current = flipped;
+    const m = motion.current;
+    m.spinV = 0;
+    m.snap = nearestFace(m.flip) + Math.PI;
+  }, [flipped]);
   const shape = useMemo(cardShape, []);
   const body = useMemo(() => {
     const g = new THREE.ExtrudeGeometry(shape, { depth: DEPTH, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 3, curveSegments: 48 });
@@ -173,13 +188,13 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
     const make = (c: HTMLCanvasElement, srgb: boolean) => {
       const t = new THREE.CanvasTexture(c);
       t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-      t.anisotropy = 8;
+      t.anisotropy = maxAniso;
       t.generateMipmaps = true;
       t.minFilter = THREE.LinearMipmapLinearFilter;
       return t;
     };
     return { front: make(faces.front, true), back: make(faces.back, true), mask: make(faces.mask, false) };
-  }, [faces]);
+  }, [faces, maxAniso]);
   const security = useMemo(() => createSecurityMaterial(textures.front, textures.mask, [1 / FACE_W, 1 / FACE_H]), [textures]);
   const backSecurity = useMemo(() => createSecurityMaterial(textures.back, textures.mask, [1 / FACE_W, 1 / FACE_H], true), [textures]);
   const materials = useMemo(() => [security, backSecurity], [security, backSecurity]);
@@ -209,7 +224,9 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
     const m = motion.current;
     const t = tilt.current;
     const now = performance.now();
-    const interacting = now - t.at < IDLE_AFTER_MS || zoom.current > 0;
+    const d = drag?.current;
+    const grabbing = Boolean(d?.down);
+    const interacting = grabbing || m.snap === null || now - t.at < IDLE_AFTER_MS || zoom.current > 0;
     const k = (rate: number) => 1 - Math.exp(-rate * dt);
     if (interacting) {
       // Settle the idle spin to the nearest full turn so the chosen face shows.
@@ -218,7 +235,34 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
     } else if (!reducedMotion) {
       m.idle += dt * ((Math.PI * 2) / IDLE_PERIOD_S);
     }
-    m.flip += ((flipped ? Math.PI : 0) - m.flip) * k(FLIP_DAMP);
+    // Grab-and-spin: follow the hand 1:1, coast with friction on release, then snap to a face.
+    if (d && grabbing) {
+      m.snap = null;
+      m.flip += d.dx;
+      m.spinV += (d.dx / Math.max(dt, 1e-3) - m.spinV) * 0.5;
+      m.dragPitch = clampDragPitch(m.dragPitch + d.dy);
+      d.dx = 0;
+      d.dy = 0;
+    } else {
+      if (m.snap === null) {
+        if (Math.abs(m.spinV) > SPIN_SNAP_SPEED && !reducedMotion) {
+          m.flip += m.spinV * dt;
+          m.spinV = decaySpin(m.spinV, dt);
+        } else {
+          m.spinV = 0;
+          m.snap = nearestFace(m.flip + (reducedMotion ? 0 : m.spinV * 0.12));
+        }
+      }
+      if (m.snap !== null) {
+        m.flip += (m.snap - m.flip) * k(FLIP_DAMP);
+        const back = isBackFace(m.snap);
+        if (back !== face.current) {
+          face.current = back;
+          onFace?.(back);
+        }
+      }
+      m.dragPitch += (0 - m.dragPitch) * k(FLIP_DAMP);
+    }
     // Low-pass the raw target first (hand tremor), then the mass-spring adds inertia.
     const rest = t.rest ?? Infinity;
     m.tx = lerpDamp(m.tx, tiltTarget(t.x, now - t.at, rest), dt);
@@ -228,7 +272,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
     const g = group.current;
     if (g) {
       g.rotation.y = (reducedMotion ? 0 : m.idle) + m.flip + Math.max(-TILT_YAW, Math.min(TILT_YAW, m.yaw.x));
-      g.rotation.x = Math.max(-TILT_PITCH, Math.min(TILT_PITCH, m.pitch.x));
+      g.rotation.x = Math.max(-TILT_PITCH, Math.min(TILT_PITCH, m.pitch.x)) + m.dragPitch;
       g.position.y = reducedMotion ? 0 : Math.sin(state.clock.elapsedTime * 0.8) * 0.02 * (1 - zoom.current);
     }
     m.z += (CAMERA_FAR + (CAMERA_NEAR - CAMERA_FAR) * zoom.current - m.z) * k(ZOOM_DAMP);
@@ -271,7 +315,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
   const slotY = qy + qrSize + 80 + 40;
 
   return (
-    <group ref={group} onClick={(e) => { e.stopPropagation(); onFlip(); }}>
+    <group ref={group} onClick={(e) => { e.stopPropagation(); if (e.delta < 6) onFlip(); }}>
       <mesh geometry={body}>
         <meshPhysicalMaterial color="#26262b" metalness={0.95} roughness={0.32} clearcoat={0.4} />
       </mesh>
@@ -324,12 +368,18 @@ function ReadySignal({ onReady, glyphs }: { onReady: () => void; glyphs: Mutable
   return null;
 }
 
+/** Native resolution, supersampled to at least 2x so sub-pixel engraving resolves; capped at 3x. */
+function renderDpr(): number {
+  const native = typeof window === "undefined" ? 2 : window.devicePixelRatio || 1;
+  return Math.min(Math.max(native, 2), 3);
+}
+
 export default function RoutCard3D(props: CardProps & { onReady: () => void }) {
   const { onReady, ...card } = props;
   const glyphs = useRef(new Set<string>());
   return (
     <Canvas
-      dpr={[1, 2]}
+      dpr={renderDpr()}
       camera={{ position: [0, 0, CAMERA_FAR], fov: 30 }}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
     >
