@@ -15,7 +15,7 @@ export const FACE_H = Math.round(FACE_W * CARD_RATIO);
  * front/back: printed artwork. mask (WebGL only): R = holographic foil
  * (emblem, ring, frame), G = latent kinegram watermark, B = emboss height.
  */
-export type CardFaces = { front: HTMLCanvasElement; back: HTMLCanvasElement; mask: HTMLCanvasElement };
+export type CardFaces = { front: HTMLCanvasElement; back: HTMLCanvasElement; mask: HTMLCanvasElement; qrFront?: QrBox; qrBack?: QrBox };
 
 function shade(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -280,7 +280,7 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   // Back: secure, rotating QR for the owner (expires with the 30 s window);
   // everyone else sees the public QR. Slim 2-module quiet zone, no extra frame.
   const secure = opts.secureQr ?? null;
-  drawQr(b, secure ?? card.qrValue, BACK_QR.x, qy, qrSize, "M", BACK_QR.quiet, 14);
+  const bq = drawQr(b, secure ?? card.qrValue, BACK_QR.x, qy, qrSize, "M", BACK_QR.quiet, 14);
   b.textAlign = "center";
   b.fillStyle = "#e4e4e7";
   const caption = secure ? "SECURE QR · 60 S · EENMALIG" : card.url.replace(/^https?:\/\//, "");
@@ -307,7 +307,7 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   lines.forEach((line, row) => {
     for (let c = 0; c < line.length; c++) b.fillText(line.charAt(c), 32 + c * cw, mrzTop + 42 + row * 38);
   });
-  return { front, back, mask };
+  return { front, back, mask, qrFront: fq, qrBack: bq };
 }
 
 export function hasWebGL(): boolean {

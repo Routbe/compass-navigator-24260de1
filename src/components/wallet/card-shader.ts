@@ -45,6 +45,8 @@ uniform float uClearcoat; // 0..1 lacquer lobe (ceramic)
 uniform float uAniso;     // 0..1 brushed highlight along the card's long axis
 uniform float uMotion;    // 0 disables temporal effects for reduced motion
 uniform float uBack;
+/** Exact printed QR panel in UV (min.xy, max.xy): no optical layer, almost no gloss. */
+uniform vec4 uQrBox;
 uniform vec2 uGyro;       // tilt / gyroscope offset, roughly -1..1
 uniform vec3 uInkGreen;
 uniform vec3 uInkSteel;
@@ -138,9 +140,9 @@ void main() {
   vec4 base = texture2D(uMap, vUv);
   vec3 mask = texture2D(uMask, vUv).rgb * (1.0 - uBack);
   // Never print optical layers over QR quiet zones, portraits or MRZ.
-  float frontReserved = max(boxMask(vUv, vec2(0.047, 0.033), vec2(0.242, 0.158)),
+  float frontReserved = max(boxMask(vUv, uQrBox.xy, uQrBox.zw),
     1.0 - smoothstep(0.235, 0.25, length((vUv - vec2(0.5, 0.58)) * vec2(1.0, 1.588))));
-  float backReserved = max(boxMask(vUv, vec2(0.108, 0.392), vec2(0.892, 0.889)),
+  float backReserved = max(boxMask(vUv, uQrBox.xy, uQrBox.zw),
     1.0 - smoothstep(0.148, 0.16, vUv.y));
   float printable = 1.0 - mix(frontReserved, backReserved, uBack);
 
@@ -310,7 +312,9 @@ void main() {
   vec3 envC = mix(vec3(0.02), vec3(1.0), smoothstep(0.35, 0.95, Rc.y))
     + vec3(0.9, 0.95, 1.0) * smoothstep(0.82, 0.98, abs(Rc.x));
   vec3 clearcoatSpecular = (min(ggxC * clamp(dot(Nc, L), 0.0, 1.0), 40.0) * 0.02 + envC * 0.6) * schlick;
-  col += clearcoatSpecular;
+  // The QR panel keeps only a faint gloss so reflections never wash out its contrast.
+  float qrPanel = boxMask(vUv, uQrBox.xy, uQrBox.zw);
+  col += clearcoatSpecular * mix(1.0, 0.08, qrPanel);
 
   // Functional fields (QR, portrait, name, MRZ): no metal, a broad matte sheen
   // (GGX, roughness 0.85) so they read as printed diffuse ink, not foil.
@@ -365,6 +369,7 @@ export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, 
       uAniso: { value: 0 },
       uMotion: { value: 1 },
       uBack: { value: back ? 1 : 0 },
+      uQrBox: { value: new THREE.Vector4(back ? 0.108 : 0.047, back ? 0.392 : 0.033, back ? 0.892 : 0.242, back ? 0.889 : 0.158) },
       uGyro: { value: new THREE.Vector2(0, 0) },
       uInkGreen: { value: ink("--card-security-ink-green") },
       uInkSteel: { value: ink("--card-security-ink-steel") },
