@@ -169,10 +169,10 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
   const camera = useThree((s) => s.camera);
   const maxAniso = useThree((s) => s.gl.capabilities.getMaxAnisotropy());
   // Face the card shows; external flips (button/tap) add half a turn from wherever it is.
-  const face = useRef(flipped);
+  const shownFace = useRef(flipped);
   useEffect(() => {
-    if (flipped === face.current) return;
-    face.current = flipped;
+    if (flipped === shownFace.current) return;
+    shownFace.current = flipped;
     const m = motion.current;
     m.spinV = 0;
     m.snap = nearestFace(m.flip) + Math.PI;
@@ -256,8 +256,8 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
       if (m.snap !== null) {
         m.flip += (m.snap - m.flip) * k(FLIP_DAMP);
         const back = isBackFace(m.snap);
-        if (back !== face.current) {
-          face.current = back;
+        if (back !== shownFace.current) {
+          shownFace.current = back;
           onFace?.(back);
         }
       }
