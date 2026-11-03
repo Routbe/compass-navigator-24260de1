@@ -10,7 +10,7 @@ import { Environment, Lightformer, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { configureTextBuilder } from "troika-three-text";
 import { CARD_RATIO, FACE_H, FACE_W, type CardFaces } from "./card-faces";
-import { clampTilt, stepSpring, type Spring } from "./card-physics";
+import { MAX_TILT_RAD, clampTilt, lerpDamp, stepSpring, type Spring } from "./card-physics";
 import { createSecurityMaterial } from "./card-shader";
 
 // Troika's nested blob importScripts conflicts with our strict script-src.
@@ -32,8 +32,8 @@ const BACK_Z = -DEPTH / 2 - 0.0025;
 const IDLE_PERIOD_S = 28;
 const IDLE_AFTER_MS = 3500;
 const FLIP_DAMP = 6;
-const TILT_YAW = 0.5;
-const TILT_PITCH = 0.34;
+const TILT_YAW = MAX_TILT_RAD;
+const TILT_PITCH = MAX_TILT_RAD;
 const CAMERA_FAR = 3.7;
 const CAMERA_NEAR = 1.15;
 const ZOOM_DAMP = 5;
@@ -155,7 +155,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
   const group = useRef<THREE.Group>(null);
   const watermark = useRef<THREE.Group>(null);
   const timer = useRef<THREE.Mesh>(null);
-  const motion = useRef({ idle: 0, flip: 0, z: CAMERA_FAR, yaw: { x: 0, v: 0 } as Spring, pitch: { x: 0, v: 0 } as Spring });
+  const motion = useRef({ idle: 0, flip: 0, z: CAMERA_FAR, yaw: { x: 0, v: 0 } as Spring, pitch: { x: 0, v: 0 } as Spring, tx: 0, ty: 0 });
   const camera = useThree((s) => s.camera);
   const shape = useMemo(cardShape, []);
   const body = useMemo(() => {
@@ -214,8 +214,11 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
       m.idle += dt * ((Math.PI * 2) / IDLE_PERIOD_S);
     }
     m.flip += ((flipped ? Math.PI : 0) - m.flip) * k(FLIP_DAMP);
-    m.yaw = stepSpring(m.yaw, clampTilt(t.x) * TILT_YAW, dt);
-    m.pitch = stepSpring(m.pitch, -clampTilt(t.y) * TILT_PITCH, dt);
+    // Low-pass the raw target first (hand tremor), then the mass-spring adds inertia.
+    m.tx = lerpDamp(m.tx, clampTilt(t.x), dt);
+    m.ty = lerpDamp(m.ty, clampTilt(t.y), dt);
+    m.yaw = stepSpring(m.yaw, m.tx * TILT_YAW, dt);
+    m.pitch = stepSpring(m.pitch, -m.ty * TILT_PITCH, dt);
     const g = group.current;
     if (g) {
       g.rotation.y = (reducedMotion ? 0 : m.idle) + m.flip + Math.max(-TILT_YAW, Math.min(TILT_YAW, m.yaw.x));
