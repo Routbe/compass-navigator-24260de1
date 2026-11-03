@@ -218,7 +218,7 @@ void main() {
   // frequency aliases into horizontal bands across the whole face.
   float brushPhase = vUv.y * 620.0;
   float brushResolved = 1.0 - smoothstep(1.1, 3.14159, fwidth(brushPhase));
-  float brush = sin(brushPhase) * 0.035 * printable * brushResolved;
+  float brush = sin(brushPhase) * 0.025 * printable * brushResolved;
   vec3 Nb = normalize(N + vB * brush);
   float ax = 0.5;  // stretched along the brush
   float ay = 0.13;
@@ -235,7 +235,10 @@ void main() {
   float brushLines = 0.5 + 0.5 * sin(brushPhase);
   vec3 anisoSpec = titanium * min(ggxAniso * nL * 0.55, 1.6) * (0.6 + 0.4 * fres)
     * (0.55 + 0.9 * brushLines * brushResolved);
-  col += (anisoSpec + titanium * brush * 1.5) * metalZone;
+  // The fine lines only catch light inside the brushed streak: painted flat they
+  // read as scanlines across the whole face.
+  float streakGlow = clamp(length(anisoSpec) * 2.5, 0.0, 1.0);
+  col += (anisoSpec + titanium * brush * 1.5 * streakGlow) * metalZone;
 
   // Hologram layer floats 1 mm below the polycarbonate: parallax from the
   // tangent-space view vector plus the gyro / tilt offset.

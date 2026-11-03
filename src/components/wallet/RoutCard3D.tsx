@@ -65,7 +65,7 @@ function cardShape(): THREE.Shape {
 
 /** ShapeGeometry UVs are in shape units; remap them to 0..1 for the face textures. */
 function faceGeometry(shape: THREE.Shape): THREE.ShapeGeometry {
-  const g = new THREE.ShapeGeometry(shape, 12);
+  const g = new THREE.ShapeGeometry(shape, 48);
   const pos = g.attributes["position"] as THREE.BufferAttribute;
   const uv = g.attributes["uv"] as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + W / 2) / W, (pos.getY(i) + H / 2) / H);
@@ -164,7 +164,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
   const camera = useThree((s) => s.camera);
   const shape = useMemo(cardShape, []);
   const body = useMemo(() => {
-    const g = new THREE.ExtrudeGeometry(shape, { depth: DEPTH, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 3, curveSegments: 16 });
+    const g = new THREE.ExtrudeGeometry(shape, { depth: DEPTH, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 3, curveSegments: 48 });
     g.translate(0, 0, -DEPTH / 2);
     return g;
   }, [shape]);
