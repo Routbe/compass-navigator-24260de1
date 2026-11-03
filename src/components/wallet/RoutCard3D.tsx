@@ -105,14 +105,18 @@ type CardProps = {
   text: { displayName: string; handle: string; subheader: string; fg: string; sovereignId: string; code: string | null };
 };
 
-/** Name pressed into the material: a dark offset "shadow" under a metallic face. */
+/** Name pressed into the material: a dark offset "shadow" under a metallic face.
+ * The shadow is only pressed under large text — at small sizes the sub-pixel
+ * offset would smear the glyphs instead of embossing them. */
 function Embossed({ children, y, size, color, weight }: { children: string; y: number; size: number; color: string; weight?: "mono" }) {
   const font = weight === "mono" ? MONO : FONT;
   return (
     <group position={[0, y, FRONT_Z + 0.0006]}>
-      <Text font={font} fontSize={size} sdfGlyphSize={128} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0.0018, -0.0018, 0]} color="#000000" fillOpacity={0.35}>
-        {children}
-      </Text>
+      {size >= 0.06 && (
+        <Text font={font} fontSize={size} sdfGlyphSize={128} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0.0018, -0.0018, 0]} color="#000000" fillOpacity={0.35}>
+          {children}
+        </Text>
+      )}
       <Text font={font} fontSize={size} sdfGlyphSize={128} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0, 0, 0.0004]} color={color}>
         {children}
         <meshBasicMaterial color={color} toneMapped={false} />
