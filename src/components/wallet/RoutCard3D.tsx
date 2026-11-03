@@ -234,6 +234,8 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
     const u = material.uniforms;
     const motionUniform = u["uMotion"];
     if (motionUniform) motionUniform.value = reducedMotion ? 0 : 1;
+    const gyro = u["uGyro"];
+    if (gyro) (gyro.value as THREE.Vector2).set(m.yaw.x / TILT_YAW, m.pitch.x / TILT_PITCH);
     // Real wall-clock time, so a replayed recording drifts out of phase.
     const time = u["uTime"];
     if (time) time.value = (Date.now() % 3_600_000) / 1000;
