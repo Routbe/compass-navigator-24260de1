@@ -40,3 +40,27 @@ describe("card physics", () => {
     expect(filterGyro(0.2, 0.5, 1 / 60)).toBeGreaterThan(0.2);
   });
 });
+
+import { MAX_TILT_RAD, TILT_LERP, lerpDamp, orientationToTilt } from "./card-physics";
+
+describe("tilt damping and limits", () => {
+  it("limits tilt to 17 degrees per axis", () => {
+    expect((MAX_TILT_RAD * 180) / Math.PI).toBeCloseTo(17, 5);
+  });
+  it("uses a damping factor between 0.05 and 0.1 per 60 Hz frame", () => {
+    expect(TILT_LERP).toBeGreaterThanOrEqual(0.05);
+    expect(TILT_LERP).toBeLessThanOrEqual(0.1);
+    expect(lerpDamp(0, 1, 1 / 60)).toBeCloseTo(TILT_LERP, 6);
+  });
+  it("lags the same at 60 Hz and 120 Hz", () => {
+    let a = 0, b = 0;
+    for (let i = 0; i < 30; i++) a = lerpDamp(a, 1, 1 / 60);
+    for (let i = 0; i < 60; i++) b = lerpDamp(b, 1, 1 / 120);
+    expect(Math.abs(a - b)).toBeLessThan(1e-9);
+  });
+  it("clamps a wild phone rotation to the visible range", () => {
+    const t = orientationToTilt(180, 90, 0);
+    expect(t.x).toBe(1);
+    expect(t.y).toBe(1);
+  });
+});

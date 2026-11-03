@@ -62,14 +62,26 @@ float hash12(vec2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
-// Thin-film interference: one oil-slick layer (n = 1.45) of thickness d nm.
+// Thin-film interference, Belcour-Barla style approximation: air / film (n = 1.6) /
+// polycarbonate (n = 1.5). Airy two-beam sum with Fresnel amplitudes, evaluated
+// at three wavelengths, so the reflection follows the real optical path difference.
 vec3 thinFilm(float cosI, float d) {
-  float n = 1.45;
-  float sinT2 = (1.0 - cosI * cosI) / (n * n);
+  float n1 = 1.0;
+  float n2 = 1.6;
+  float n3 = 1.5;
+  float sinT2 = (1.0 - cosI * cosI) / (n2 * n2);
   float cosT = sqrt(max(1.0 - sinT2, 0.0));
-  vec3 lambda = vec3(640.0, 540.0, 455.0);
-  vec3 phase = 12.566371 * n * d * cosT / lambda;
-  return 0.5 + 0.5 * cos(phase);
+  float cos3 = sqrt(max(1.0 - (1.0 - cosI * cosI) / (n3 * n3), 0.0));
+  // Unpolarized average of s/p amplitude reflectances at both interfaces.
+  float r12 = 0.5 * ((n1 * cosI - n2 * cosT) / (n1 * cosI + n2 * cosT) + (n2 * cosI - n1 * cosT) / (n2 * cosI + n1 * cosT));
+  float r23 = 0.5 * ((n2 * cosT - n3 * cos3) / (n2 * cosT + n3 * cos3) + (n3 * cosT - n2 * cos3) / (n3 * cosT + n2 * cos3));
+  vec3 lambda = vec3(650.0, 532.0, 450.0);
+  vec3 phase = 12.566371 * n2 * d * cosT / lambda + 3.14159 * step(n2, n1); // half-wave shift handled by r signs
+  vec3 num = r12 * r12 + r23 * r23 + 2.0 * r12 * r23 * cos(phase);
+  vec3 den = 1.0 + r12 * r12 * r23 * r23 + 2.0 * r12 * r23 * cos(phase);
+  vec3 R = num / den;
+  // Normalize to a displayable tint while keeping the spectral ratios.
+  return clamp(R / max(max(R.r, max(R.g, R.b)), 1e-3), 0.0, 1.0);
 }
 
 float aaLine(float v, float width) {
@@ -165,7 +177,7 @@ void main() {
 
   // Foil: thin film whose thickness flows over the card, so colours sweep with tilt.
   float foil = max(mask.r, isHolo * 0.45 + guilloche * 0.25 * isHolo);
-  float thickness = 360.0 + 260.0 * sin(p.x * 3.1 + p.y * 2.3 + uSeed.w * 6.2831) + 120.0 * guilloche;
+  float thickness = 450.0 + 180.0 * sin(p.x * 3.1 + p.y * 2.3 + uSeed.w * 6.2831) + 120.0 * guilloche;
   vec3 film = thinFilm(cosV, thickness);
   // Bias toward ROUT gold / emerald / deep blue.
   film = mix(film, film * vec3(1.05, 0.98, 1.1) + vec3(0.04, 0.02, 0.0), 0.5);
@@ -224,13 +236,19 @@ void main() {
   vec2 Ls = vec2(dot(L, vT), dot(L, vB));
   vec3 lensInfo = lensGrid(holoUv, Ls);
   float viewShift = dot(Vt.xy, vec2(0.7, 0.45)) + uGyro.x * 0.5;
-  vec3 holoFilm = thinFilm(cosV, 420.0 + 240.0 * sin(lensInfo.z * 6.2831 + viewShift * 9.0));
+  vec3 holoFilm = thinFilm(cosV, 450.0 + 160.0 * sin(lensInfo.z * 6.2831 + viewShift * 9.0));
   vec3 gold = vec3(1.0, 0.78, 0.36);
   vec3 silver = vec3(0.86, 0.9, 0.96);
   vec3 foilMetal = mix(gold, silver, 0.5 + 0.5 * sin(viewShift * 7.0 + lensInfo.z * 3.0));
   vec3 holoCol = foilMetal * holoFilm * (0.45 + env * 0.4) + lensInfo.y * vec3(1.4, 1.3, 1.15);
   float holoWeight = printable * (0.16 + 0.55 * mask.r) * (0.5 + 0.5 * (1.0 - cosV));
   col = mix(col, holoCol, lensInfo.x * holoWeight) + lensInfo.y * holoWeight * 0.35;
+
+  // Polycarbonate + hologram: razor-sharp GGX lobe, roughness 0.02 (printable only).
+  float a02 = 0.02 * 0.02;
+  float dP = NdotH * NdotH * (a02 - 1.0) + 1.0;
+  float ggxP = a02 / (3.14159 * dP * dP + 1e-7);
+  col += min(ggxP * diff, 30.0) * 0.012 * fres * printable;
 
   float inkAngle = clamp((1.0 - cosV) * 2.0 + dot(L, vT) * 0.35 + 0.25, 0.0, 1.0);
   vec3 securityInk = mix(uInkGreen, uInkSteel, smoothstep(0.0, 0.65, inkAngle));
@@ -278,6 +296,25 @@ void main() {
     + vec3(0.9, 0.95, 1.0) * smoothstep(0.82, 0.98, abs(Rc.x));
   vec3 clearcoatSpecular = (min(ggxC * clamp(dot(Nc, L), 0.0, 1.0), 40.0) * 0.02 + envC * 0.6) * schlick;
   col += clearcoatSpecular;
+
+  // Functional fields (QR, portrait, name, MRZ): no metal, a broad matte sheen
+  // (GGX, roughness 0.85) so they read as printed diffuse ink, not foil.
+  float a85 = 0.85 * 0.85;
+  float dM = nHc * nHc * (a85 - 1.0) + 1.0;
+  float ggxM = a85 / (3.14159 * dM * dM);
+  col += vec3(ggxM * clamp(dot(Nc, L), 0.0, 1.0) * 0.03) * (1.0 - printable);
+
+  // Prismatic rim: a hairline band at the mesh boundary splits light into a
+  // narrow spectral streak only at grazing angles.
+  vec2 edgeUv = min(vUv, 1.0 - vUv) * vec2(1.0, 1.588);
+  float edgeDist = min(edgeUv.x, edgeUv.y);
+  float rimAa = max(fwidth(edgeDist), 0.0001);
+  float rimBand = 1.0 - smoothstep(0.004, 0.004 + rimAa * 1.5, edgeDist);
+  float grazing = pow(1.0 - cosC, 4.0);
+  float disp = dot(Rc, vT) * 2.0 + dot(Rc, vB) + edgeDist * 140.0;
+  vec3 prism = 0.5 + 0.5 * cos(6.2831 * (disp + vec3(0.0, 0.33, 0.67)));
+  float laser = pow(clamp(dot(Rc, L), 0.0, 1.0), 24.0);
+  col += prism * rimBand * grazing * (0.6 + 3.0 * laser);
 
   gl_FragColor = vec4(max(col, 0.0), 1.0);
   #include <tonemapping_fragment>

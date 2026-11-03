@@ -10,6 +10,32 @@ export const CARD_DAMPING_RATIO = 0.78;
 /** Gyro noise below this angle (rad) is ignored before it reaches the spring. */
 export const GYRO_DEADZONE = 0.012;
 const SUBSTEP = 1 / 240;
+/** Hard limit on tilt rotation per axis: 17 degrees, never enough to show the back. */
+export const MAX_TILT_RAD = (17 * Math.PI) / 180;
+/** Low-pass on the tilt target, per 60 Hz frame (0.05..0.1 = heavy, lagging). */
+export const TILT_LERP = 0.08;
+
+/**
+ * currentOffset += (target - currentOffset) * factor, made frame-rate
+ * independent so 60 Hz and 120 Hz screens lag by the same wall-clock time.
+ */
+export function lerpDamp(current: number, target: number, dt: number, factor = TILT_LERP): number {
+  if (!Number.isFinite(target)) return current;
+  const k = 1 - Math.pow(1 - factor, Math.max(dt, 0) * 60);
+  return current + (target - current) * k;
+}
+
+/** Map a deviceorientation reading to normalized tilt, compensating screen rotation. */
+export function orientationToTilt(beta: number, gamma: number, screenAngle: number): { x: number; y: number } {
+  const a = ((screenAngle % 360) + 360) % 360;
+  // Portrait: gamma = left/right, beta = front/back (rest at ~45 deg, held in hand).
+  let x = gamma;
+  let y = beta - 45;
+  if (a === 90) { x = beta; y = -gamma - 45; }
+  else if (a === 270) { x = -beta; y = gamma - 45; }
+  else if (a === 180) { x = -gamma; y = -beta - 45; }
+  return { x: clampTilt(x / 35), y: clampTilt(y / 35) };
+}
 
 export type Spring = { x: number; v: number };
 

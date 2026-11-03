@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, RotateCw, ShieldCheck, Smartphone, UserPlus, Wallet, ZoomIn, ZoomOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { filterGyro } from "./card-physics";
+import { filterGyro, orientationToTilt } from "./card-physics";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -253,13 +253,29 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
     const onTilt = (e: DeviceOrientationEvent) => {
       const prev = tilt.current;
       const dt = Math.min(0.1, (performance.now() - prev.at) / 1000 || 1 / 60);
-      const x = filterGyro(prev.x, Math.max(-1, Math.min(1, (e.gamma ?? 0) / 35)), dt);
-      const y = filterGyro(prev.y, Math.max(-1, Math.min(1, ((e.beta ?? 45) - 45) / 35)), dt);
+      if (e.beta == null || e.gamma == null) return;
+      const raw = orientationToTilt(e.beta, e.gamma, window.screen.orientation?.angle ?? 0);
+      const x = filterGyro(prev.x, raw.x, dt);
+      const y = filterGyro(prev.y, raw.y, dt);
       tilt.current = { x, y, at: performance.now() };
       setFlatTilt({ x, y });
     };
     window.addEventListener("deviceorientation", onTilt);
     return () => window.removeEventListener("deviceorientation", onTilt);
+  }, [open, gyro]);
+
+  // Desktop fallback: without a gyroscope, the mouse anywhere in the viewport
+  // sets the same tilt target, so it gets the identical lerp + spring damping.
+  useEffect(() => {
+    if (!open || gyro) return;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse") return;
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = -((e.clientY / window.innerHeight) * 2 - 1);
+      tilt.current = { x, y, at: performance.now() };
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
   }, [open, gyro]);
 
   useEffect(() => {
