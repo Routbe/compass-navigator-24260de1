@@ -161,10 +161,10 @@ void main() {
   vec2 p = (vUv - 0.5) * vec2(1.0, 1.588);
   float r = length(p);
   float a = atan(p.y, p.x);
-  float rose = aaLine(r * 96.0 + 0.85 * sin(a * 12.0) + 0.35 * sin(a * 7.0 + r * 38.0), 0.022);
-  float rose2 = aaLine(r * 91.0 - 0.85 * sin(a * 12.0 + 1.3), 0.022);
-  float waves = aaLine(p.y * 112.0 + 1.6 * sin(p.x * 26.0 + p.y * 8.0), 0.02);
-  float crossWaves = aaLine(p.x * 103.0 + 1.1 * sin(p.y * 19.0 - p.x * 5.0), 0.02);
+  float rose = aaLine(r * 46.0 + 0.85 * sin(a * 12.0) + 0.35 * sin(a * 7.0 + r * 38.0), 0.022);
+  float rose2 = aaLine(r * 43.0 - 0.85 * sin(a * 12.0 + 1.3), 0.022);
+  float waves = aaLine(p.y * 52.0 + 1.6 * sin(p.x * 26.0 + p.y * 8.0), 0.02);
+  float crossWaves = aaLine(p.x * 48.0 + 1.1 * sin(p.y * 19.0 - p.x * 5.0), 0.02);
   float guilloche = max(max(rose, rose2) * (1.0 - smoothstep(0.15, 0.72, r)), max(waves, crossWaves) * 0.65) * printable;
 
   // Finish weights without branches.
@@ -214,10 +214,14 @@ void main() {
   col = mix(col, col + vec3(0.06, 0.11, 0.16) * (0.6 + 0.4 * diff), cayenne * 0.4);
 
   // Anisotropic GGX (brushed white-gold / titanium), brush direction = card X.
-  float brush = sin(vUv.y * 2500.0) * 0.02 * printable;
+  // The brush lines are faded out once they fall below one pixel: an unresolved
+  // frequency aliases into horizontal bands across the whole face.
+  float brushPhase = vUv.y * 620.0;
+  float brushResolved = 1.0 - smoothstep(1.1, 3.14159, fwidth(brushPhase));
+  float brush = sin(brushPhase) * 0.02 * printable * brushResolved;
   vec3 Nb = normalize(N + vB * brush);
   float ax = 0.42;  // stretched along the brush
-  float ay = 0.06;
+  float ay = 0.13;
   float tH = dot(H, vT);
   float bH = dot(H, vB);
   float nH = max(dot(Nb, H), 0.0);
@@ -226,7 +230,7 @@ void main() {
   float nL = clamp(dot(Nb, L), 0.0, 1.0);
   vec3 titanium = mix(vec3(0.78, 0.8, 0.83), vec3(0.95, 0.88, 0.74), 0.35);
   float metalZone = printable * clamp(isMetal + uAniso + mask.r * 0.5, 0.0, 1.0);
-  vec3 anisoSpec = titanium * min(ggxAniso * nL * 0.06, 1.4) * (0.6 + 0.4 * fres);
+  vec3 anisoSpec = titanium * min(ggxAniso * nL * 0.55, 1.6) * (0.6 + 0.4 * fres);
   col += (anisoSpec + titanium * brush * 1.5) * metalZone;
 
   // Hologram layer floats 1 mm below the polycarbonate: parallax from the
@@ -241,7 +245,7 @@ void main() {
   vec3 silver = vec3(0.86, 0.9, 0.96);
   vec3 foilMetal = mix(gold, silver, 0.5 + 0.5 * sin(viewShift * 7.0 + lensInfo.z * 3.0));
   vec3 holoCol = foilMetal * holoFilm * (0.45 + env * 0.4) + lensInfo.y * vec3(1.4, 1.3, 1.15);
-  float holoWeight = printable * (0.16 + 0.55 * mask.r) * (0.5 + 0.5 * (1.0 - cosV));
+  float holoWeight = printable * (0.34 + 0.7 * mask.r) * (0.75 + 0.35 * (1.0 - cosV));
   col = mix(col, holoCol, lensInfo.x * holoWeight) + lensInfo.y * holoWeight * 0.35;
 
   // Polycarbonate + hologram: razor-sharp GGX lobe, roughness 0.02 (printable only).
@@ -253,7 +257,7 @@ void main() {
   float inkAngle = clamp((1.0 - cosV) * 2.0 + dot(L, vT) * 0.35 + 0.25, 0.0, 1.0);
   vec3 securityInk = mix(uInkGreen, uInkSteel, smoothstep(0.0, 0.65, inkAngle));
   securityInk = mix(securityInk, uInkPlatinum, smoothstep(0.6, 1.0, inkAngle));
-  col = mix(col, securityInk * (0.7 + 0.3 * diff), guilloche * 0.48);
+  col = mix(col, securityInk * (0.7 + 0.3 * diff), guilloche * 0.55);
 
   // Printed dual-interface module: rounded perimeter, segmented contacts, NFC arc.
   vec2 chip = (vUv - vec2(0.78, 0.19)) * vec2(1.0, 1.588);
@@ -316,7 +320,10 @@ void main() {
   float laser = pow(clamp(dot(Rc, L), 0.0, 1.0), 24.0);
   col += prism * rimBand * grazing * (0.6 + 3.0 * laser);
 
-  gl_FragColor = vec4(max(col, 0.0), 1.0);
+  // Ordered dither: the printed canvas gradient is only 8-bit, so without this
+  // the dark background quantises into visible bands.
+  float dither = hash12(gl_FragCoord.xy + uSeed.xy * 256.0) - 0.5;
+  gl_FragColor = vec4(max(col + dither * (1.0 / 255.0), 0.0), 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
