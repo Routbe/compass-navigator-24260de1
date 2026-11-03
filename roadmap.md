@@ -33,3 +33,5 @@
 - [ ] Native-resolution card rendering (DPR up to 3, max anisotropy).
 - [ ] Studio Liquid Glass buttons: refraction, aberration, saturation, specular, light/dark/neon presets, smooth transitions.
 - [ ] Fluid text / dissolve / MSDF typography effects — later phase.
+- [ ] Lock all card elements rigidly (no watermark/parts drifting during motion).
+- [ ] Front QR stays scannable; back QR: remove black edge, slimmer white quiet zone.
