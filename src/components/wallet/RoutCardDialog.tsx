@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, RotateCw, ShieldCheck, Smartphone, UserPlus, Wallet, ZoomIn, ZoomOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { GYRO_CALIBRATION_SAMPLES, GYRO_REST_MS, filterGyro, orientationToDegrees, orientationToTilt } from "./card-physics";
+import { GYRO_CALIBRATION_SAMPLES, GYRO_REST_MS, filterGyro, orientationToDegrees, orientationToTilt, SPIN_PER_FRAME_WIDTH } from "./card-physics";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,7 +18,7 @@ import { SECURE_ROTATE_MS } from "@/lib/wallet/card-token";
 import { CardKeysPanel } from "./CardKeysPanel";
 import type { WalletStatus } from "@/lib/wallet/wallet-pass";
 import { drawCardFaces, hasWebGL, type CardFaces } from "./card-faces";
-import type { CardFinish, LiveRef, SecureRef, TiltRef, ZoomRef } from "./RoutCard3D";
+import type { CardFinish, LiveRef, SecureRef, TiltRef, ZoomRef, DragRef } from "./RoutCard3D";
 
 const RoutCard3D = lazy(() => import("./RoutCard3D"));
 
