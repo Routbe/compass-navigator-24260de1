@@ -1,20 +1,17 @@
-/** Temporary read-only probe: is the gateway reachable and are there profiles? */
-import { databaseTransport, runBatch } from "@/lib/neon";
+/** Temporary read-only probe: pick a public profile whose card can be opened. */
+import { runBatch } from "@/lib/neon";
 
 async function main() {
-  console.log("transport:", databaseTransport());
-  try {
-    const r = await runBatch(
-      [
-        { query: "select current_user as who", params: [] },
-        { query: "select count(*)::int as n from profiles", params: [] },
-      ],
-      { withContext: false },
-    );
-    console.log("who:", JSON.stringify(r[0]?.rows));
-    console.log("profiles:", JSON.stringify(r[1]?.rows));
-  } catch (e) {
-    console.log("FAILED:", (e as Error).message, (e as Error & { code?: string }).code);
-  }
+  const cols = await runBatch(
+    [{ query: "select column_name from information_schema.columns where table_name='profiles' order by 1", params: [] }],
+    { withContext: false },
+  );
+  console.log("columns:", cols[0]!.rows.map((r) => String(r.column_name)).join(", "));
+
+  const rows = await runBatch(
+    [{ query: "select handle, display_name, visibility, is_verified from profiles where handle is not null limit 12", params: [] }],
+    { withContext: false },
+  );
+  console.log("sample:", JSON.stringify(rows[0]!.rows, null, 1));
 }
-void main();
+void main().catch((e) => console.log("FAILED:", (e as Error).message));
