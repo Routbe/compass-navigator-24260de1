@@ -110,10 +110,10 @@ function Embossed({ children, y, size, color, weight }: { children: string; y: n
   const font = weight === "mono" ? MONO : FONT;
   return (
     <group position={[0, y, FRONT_Z + 0.0006]}>
-      <Text font={font} fontSize={size} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0.0018, -0.0018, 0]} color="#000000" fillOpacity={0.35}>
+      <Text font={font} fontSize={size} sdfGlyphSize={128} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0.0018, -0.0018, 0]} color="#000000" fillOpacity={0.35}>
         {children}
       </Text>
-      <Text font={font} fontSize={size} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0, 0, 0.0004]} color={color}>
+      <Text font={font} fontSize={size} sdfGlyphSize={128} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0, 0, 0.0004]} color={color}>
         {children}
         <meshBasicMaterial color={color} toneMapped={false} />
       </Text>
@@ -293,7 +293,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
 
       {/* Back: rotating live code + countdown. */}
       <group position={[0, 0, BACK_Z - 0.0006]} rotation={[0, Math.PI, 0]}>
-        <Text font={MONO} fontSize={0.06} letterSpacing={0.18} position={[0, cy(slotY), 0]} anchorX="center" anchorY="middle" color="#f4f4f5">
+        <Text font={MONO} fontSize={0.06} sdfGlyphSize={128} letterSpacing={0.18} position={[0, cy(slotY), 0]} anchorX="center" anchorY="middle" color="#f4f4f5">
           {text.code ? `${text.code.slice(0, 3)} ${text.code.slice(3)}` : "··· ···"}
         </Text>
         <mesh position={[0, cy(qy + qrSize / 2), 0.0003]} material={ring}>
