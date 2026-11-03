@@ -230,14 +230,16 @@ void main() {
   float nL = clamp(dot(Nb, L), 0.0, 1.0);
   vec3 titanium = mix(vec3(0.78, 0.8, 0.83), vec3(0.95, 0.88, 0.74), 0.35);
   float metalZone = printable * clamp(isMetal + uAniso + mask.r * 0.5, 0.0, 1.0);
-  // Brushed structure: the fine parallel lines modulate the streak, so the metal
-  // reads as brushed rather than as one plain soft sheen.
+  // Brushed streak: a band of light stretched along the brush (card X), sitting
+  // where the mirror reflection of the light reaches the eye. It sweeps across
+  // the card as the card tilts, and the fine lines only show inside the band —
+  // modulating the whole face instead would read as scanlines.
+  float devY = R.y - L.y;
+  float band = exp(-devY * devY * 9.0);
   float brushLines = 0.5 + 0.5 * sin(brushPhase);
-  vec3 anisoSpec = titanium * min(ggxAniso * nL * 0.55, 1.6) * (0.6 + 0.4 * fres)
-    * (0.55 + 0.9 * brushLines * brushResolved);
-  // The fine lines only catch light inside the brushed streak: painted flat they
-  // read as scanlines across the whole face.
-  float streakGlow = clamp(length(anisoSpec) * 2.5, 0.0, 1.0);
+  float streak = band * (0.55 + 0.9 * brushLines * brushResolved);
+  vec3 anisoSpec = titanium * (streak + min(ggxAniso * nL * 0.1, 0.3)) * nL * (0.6 + 0.4 * fres);
+  float streakGlow = clamp(band * 1.6, 0.0, 1.0);
   col += (anisoSpec + titanium * brush * 1.5 * streakGlow) * metalZone;
 
   // Hologram layer floats 1 mm below the polycarbonate: parallax from the
