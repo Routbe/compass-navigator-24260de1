@@ -216,7 +216,7 @@ void main() {
   // Anisotropic GGX (brushed white-gold / titanium), brush direction = card X.
   // The brush lines are faded out once they fall below one pixel: an unresolved
   // frequency aliases into horizontal bands across the whole face.
-  float brushPhase = vUv.y * 620.0;
+  float brushPhase = vUv.y * 180.0;
   float brushResolved = 1.0 - smoothstep(1.1, 3.14159, fwidth(brushPhase));
   float brush = sin(brushPhase) * 0.025 * printable * brushResolved;
   vec3 Nb = normalize(N + vB * brush);
@@ -230,15 +230,17 @@ void main() {
   float nL = clamp(dot(Nb, L), 0.0, 1.0);
   vec3 titanium = mix(vec3(0.78, 0.8, 0.83), vec3(0.95, 0.88, 0.74), 0.35);
   float metalZone = printable * clamp(isMetal + uAniso + mask.r * 0.5, 0.0, 1.0);
-  // Brushed streak: a band of light stretched along the brush (card X), sitting
-  // where the mirror reflection of the light reaches the eye. It sweeps across
-  // the card as the card tilts, and the fine lines only show inside the band —
-  // modulating the whole face instead would read as scanlines.
+
+  // Brushed streak: the brush lines are tiny cylinders, so the facets whose tilt
+  // mirrors the light catch more of it. That tilt swings with the line phase, so
+  // the highlight breaks into fine parallel lines; the band term keeps the
+  // structure where the light actually mirrors instead of washing the whole face.
+  vec3 Ng = normalize(N + vB * (brush * 9.0));
+  float groove = pow(clamp(dot(Ng, H), 0.0, 1.0), 24.0) * brushResolved;
   float devY = R.y - L.y;
   float band = exp(-devY * devY * 9.0);
-  float brushLines = 0.5 + 0.5 * sin(brushPhase);
-  float streak = band * (0.55 + 0.9 * brushLines * brushResolved);
-  vec3 anisoSpec = titanium * (streak + min(ggxAniso * nL * 0.1, 0.3)) * nL * (0.6 + 0.4 * fres);
+  float brushed = groove * (0.25 + 0.75 * band);
+  vec3 anisoSpec = titanium * (brushed * 1.4 + min(ggxAniso * nL * 0.1, 0.3)) * nL * (0.6 + 0.4 * fres);
   float streakGlow = clamp(band * 1.6, 0.0, 1.0);
   col += (anisoSpec + titanium * brush * 1.5 * streakGlow) * metalZone;
 
