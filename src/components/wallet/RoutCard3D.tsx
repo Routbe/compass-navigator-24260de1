@@ -65,7 +65,7 @@ function cardShape(): THREE.Shape {
 
 /** ShapeGeometry UVs are in shape units; remap them to 0..1 for the face textures. */
 function faceGeometry(shape: THREE.Shape): THREE.ShapeGeometry {
-  const g = new THREE.ShapeGeometry(shape, 12);
+  const g = new THREE.ShapeGeometry(shape, 48);
   const pos = g.attributes["position"] as THREE.BufferAttribute;
   const uv = g.attributes["uv"] as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + W / 2) / W, (pos.getY(i) + H / 2) / H);
@@ -105,15 +105,19 @@ type CardProps = {
   text: { displayName: string; handle: string; subheader: string; fg: string; sovereignId: string; code: string | null };
 };
 
-/** Name pressed into the material: a dark offset "shadow" under a metallic face. */
+/** Name pressed into the material: a dark offset "shadow" under a metallic face.
+ * The shadow is only pressed under large text — at small sizes the sub-pixel
+ * offset would smear the glyphs instead of embossing them. */
 function Embossed({ children, y, size, color, weight }: { children: string; y: number; size: number; color: string; weight?: "mono" }) {
   const font = weight === "mono" ? MONO : FONT;
   return (
     <group position={[0, y, FRONT_Z + 0.0006]}>
-      <Text font={font} fontSize={size} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0.0018, -0.0018, 0]} color="#000000" fillOpacity={0.35}>
-        {children}
-      </Text>
-      <Text font={font} fontSize={size} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0, 0, 0.0004]} color={color}>
+      {size >= 0.06 && (
+        <Text font={font} fontSize={size} sdfGlyphSize={128} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0.0018, -0.0018, 0]} color="#000000" fillOpacity={0.35}>
+          {children}
+        </Text>
+      )}
+      <Text font={font} fontSize={size} sdfGlyphSize={128} maxWidth={W * 0.86} anchorX="center" anchorY="middle" position={[0, 0, 0.0004]} color={color}>
         {children}
         <meshBasicMaterial color={color} toneMapped={false} />
       </Text>
@@ -160,7 +164,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
   const camera = useThree((s) => s.camera);
   const shape = useMemo(cardShape, []);
   const body = useMemo(() => {
-    const g = new THREE.ExtrudeGeometry(shape, { depth: DEPTH, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 3, curveSegments: 16 });
+    const g = new THREE.ExtrudeGeometry(shape, { depth: DEPTH, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 3, curveSegments: 48 });
     g.translate(0, 0, -DEPTH / 2);
     return g;
   }, [shape]);
@@ -293,7 +297,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, t
 
       {/* Back: rotating live code + countdown. */}
       <group position={[0, 0, BACK_Z - 0.0006]} rotation={[0, Math.PI, 0]}>
-        <Text font={MONO} fontSize={0.06} letterSpacing={0.18} position={[0, cy(slotY), 0]} anchorX="center" anchorY="middle" color="#f4f4f5">
+        <Text font={MONO} fontSize={0.06} sdfGlyphSize={128} letterSpacing={0.18} position={[0, cy(slotY), 0]} anchorX="center" anchorY="middle" color="#f4f4f5">
           {text.code ? `${text.code.slice(0, 3)} ${text.code.slice(3)}` : "··· ···"}
         </Text>
         <mesh position={[0, cy(qy + qrSize / 2), 0.0003]} material={ring}>
