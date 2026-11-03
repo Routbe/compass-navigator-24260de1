@@ -9,7 +9,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Lightformer, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { configureTextBuilder } from "troika-three-text";
-import { CARD_RATIO, FACE_H, FACE_W, type CardFaces } from "./card-faces";
+import { BACK_QR, CARD_RATIO, FACE_H, FACE_W, type CardFaces, type QrBox } from "./card-faces";
 import { MAX_TILT_RAD, SPIN_SNAP_SPEED, clampDragPitch, clampTilt, decaySpin, isBackFace, lerpDamp, nearestFace, stepSpring, tiltTarget, type Spring } from "./card-physics";
 import { createSecurityMaterial } from "./card-shader";
 
@@ -199,6 +199,15 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
   const backSecurity = useMemo(() => createSecurityMaterial(textures.back, textures.mask, [1 / FACE_W, 1 / FACE_H], true), [textures]);
   const materials = useMemo(() => [security, backSecurity], [security, backSecurity]);
   useEffect(() => {
+    // Reserve exactly the printed QR panel, so no unprinted rim shows around it.
+    const toUv = (b: QrBox | undefined, m: THREE.ShaderMaterial) => {
+      const u = m.uniforms["uQrBox"];
+      if (b && u?.value instanceof THREE.Vector4) u.value.set(b.x / FACE_W, 1 - (b.y + b.w) / FACE_H, (b.x + b.w) / FACE_W, 1 - b.y / FACE_H);
+    };
+    toUv(faces.qrFront, security);
+    toUv(faces.qrBack, backSecurity);
+  }, [faces, security, backSecurity]);
+  useEffect(() => {
     for (const material of materials) {
     const u = material.uniforms;
     const set = (name: string, value: number) => { const uniform = u[name]; if (uniform) uniform.value = value; };
@@ -279,9 +288,10 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
     camera.position.z = m.z;
     const wm = watermark.current;
     if (wm) {
-      wm.position.x = reducedMotion ? 0 : m.yaw.x * 0.16;
-      wm.position.y = H * 0.29 + (reducedMotion ? 0 : m.pitch.x * 0.12);
-      wm.rotation.z = reducedMotion ? -0.12 : -0.12 + m.yaw.x * 0.08;
+      // Rigidly printed: every element stays fixed to the card body.
+      wm.position.x = 0;
+      wm.position.y = H * 0.29;
+      wm.rotation.z = -0.12;
     }
     for (const material of materials) {
     const u = material.uniforms;
@@ -310,8 +320,8 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
   });
 
   // Back-face layout in canvas pixels (matches card-faces.ts).
-  const qrSize = FACE_W - 176;
-  const qy = Math.round(FACE_H * 0.13);
+  const qrSize = BACK_QR.size;
+  const qy = BACK_QR.y;
   const slotY = qy + qrSize + 80 + 40;
 
   return (
@@ -345,7 +355,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
           {text.code ? `${text.code.slice(0, 3)} ${text.code.slice(3)}` : "··· ···"}
         </Text>
         <mesh position={[0, cy(qy + qrSize / 2), 0.0003]} material={ring}>
-          <planeGeometry args={[(qrSize + 44) / FACE_W, ((qrSize + 44) / FACE_H) * H]} />
+          <planeGeometry args={[(qrSize + 20) / FACE_W, ((qrSize + 20) / FACE_H) * H]} />
         </mesh>
         <mesh ref={timer} position={[0, cy(slotY + 22), 0.0002]}>
           <planeGeometry args={[cx(FACE_W - 64) - cx(64), 0.004]} />
