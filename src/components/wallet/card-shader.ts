@@ -45,6 +45,7 @@ uniform float uClearcoat; // 0..1 lacquer lobe (ceramic)
 uniform float uAniso;     // 0..1 brushed highlight along the card's long axis
 uniform float uMotion;    // 0 disables temporal effects for reduced motion
 uniform float uBack;
+uniform vec2 uGyro;       // tilt / gyroscope offset, roughly -1..1
 uniform vec3 uInkGreen;
 uniform vec3 uInkSteel;
 uniform vec3 uInkPlatinum;
@@ -88,6 +89,37 @@ float boxMask(vec2 uv, vec2 lo, vec2 hi) {
 float contour(float distanceToEdge, float width) {
   float aa = max(fwidth(distanceToEdge), 0.0001);
   return 1.0 - smoothstep(width, width + aa, abs(distanceToEdge));
+}
+
+// ---- Base layer: polycarbonate micro-relief + banknote guilloche (branch-free) ----
+float cayenneGuilloche(vec2 uv, float time) {
+  float l1 = sin(uv.x * 150.0 + sin(uv.y * 30.0 + time) * 5.0);
+  float l2 = cos(uv.y * 150.0 + cos(uv.x * 40.0 - time) * 4.0);
+  float v = abs(l1 + l2) * 0.2;
+  float aa = max(fwidth(v), 0.0001);
+  // Fade the line where it is smaller than a pixel instead of aliasing.
+  return (1.0 - smoothstep(0.0, 0.01 + aa, v)) * (1.0 - smoothstep(0.08, 0.3, aa));
+}
+
+// ---- Lenticular hologram layer: rotated micro-dot lens grid ----
+// Returns x = lens coverage, y = bevel edge highlight, z = moire phase.
+vec3 lensGrid(vec2 uv, vec2 Lscreen) {
+  mat2 rot = mat2(0.9659, -0.2588, 0.2588, 0.9659); // 15 deg, beats against the guilloche
+  vec2 g = rot * uv * 54.0;
+  vec2 cell = fract(g) - 0.5;
+  float d = length(cell);
+  float aa = max(fwidth(d), 0.0001);
+  float resolved = 1.0 - smoothstep(0.12, 0.4, fwidth(g.x));
+  float lens = (1.0 - smoothstep(0.32 - aa, 0.32 + aa, d)) * resolved;
+  // Dome height; its screen-space derivative gives a faux bevel normal.
+  float h = clamp(1.0 - d / 0.32, 0.0, 1.0);
+  h = sqrt(h);
+  vec2 grad = vec2(dFdx(h), dFdy(h)) / max(aa, 0.0001);
+  float slope = clamp(length(grad) * 0.35, 0.0, 1.0);
+  float facing = clamp(dot(normalize(grad + 1e-5), normalize(Lscreen + 1e-5)) * 0.5 + 0.5, 0.0, 1.0);
+  float edge = slope * facing * lens;
+  float phase = fract(dot(floor(g), vec2(0.127, 0.311)));
+  return vec3(lens, edge, phase);
 }
 
 void main() {
@@ -163,6 +195,27 @@ void main() {
   col += pow(NdotH, 900.0) * 6.0 * uClearcoat * (0.04 + 0.96 * pow(1.0 - cosV, 5.0)) + pow(NdotH, 900.0) * 1.2 * uClearcoat;
   col += env * fres * mix(0.09, 0.2, isGlass);
   col = mix(col, film * (0.55 + env * 0.5 + spec * 0.8), foil * (0.55 + 0.4 * (1.0 - cosV)));
+  // Base layer: polycarbonate micro-scratches + cayenne guilloche as UV/intaglio ink.
+  float scratches = hash12(floor(vUv * 800.0)) * 0.04;
+  float cayenne = cayenneGuilloche(vUv, uTime * 0.05 * uMotion);
+  col += (scratches - 0.02) * (0.4 + 0.6 * fres);
+  col = mix(col, col + vec3(0.06, 0.11, 0.16) * (0.6 + 0.4 * diff), cayenne * 0.4);
+
+  // Hologram layer floats 1 mm below the polycarbonate: parallax from the
+  // tangent-space view vector plus the gyro / tilt offset.
+  vec3 Vt = vec3(dot(V, vT), dot(V, vB), max(dot(V, vN), 0.2));
+  vec2 holoUv = p + (Vt.xy / Vt.z) * 0.0117 + uGyro * 0.012 * uMotion;
+  vec2 Ls = vec2(dot(L, vT), dot(L, vB));
+  vec3 lensInfo = lensGrid(holoUv, Ls);
+  float viewShift = dot(Vt.xy, vec2(0.7, 0.45)) + uGyro.x * 0.5;
+  vec3 holoFilm = thinFilm(cosV, 420.0 + 240.0 * sin(lensInfo.z * 6.2831 + viewShift * 9.0));
+  vec3 gold = vec3(1.0, 0.78, 0.36);
+  vec3 silver = vec3(0.86, 0.9, 0.96);
+  vec3 foilMetal = mix(gold, silver, 0.5 + 0.5 * sin(viewShift * 7.0 + lensInfo.z * 3.0));
+  vec3 holoCol = foilMetal * holoFilm * (0.45 + env * 0.4) + lensInfo.y * vec3(1.4, 1.3, 1.15);
+  float holoWeight = printable * (0.16 + 0.55 * mask.r) * (0.5 + 0.5 * (1.0 - cosV));
+  col = mix(col, holoCol, lensInfo.x * holoWeight) + lensInfo.y * holoWeight * 0.35;
+
   float inkAngle = clamp((1.0 - cosV) * 2.0 + dot(L, vT) * 0.35 + 0.25, 0.0, 1.0);
   vec3 securityInk = mix(uInkGreen, uInkSteel, smoothstep(0.0, 0.65, inkAngle));
   securityInk = mix(securityInk, uInkPlatinum, smoothstep(0.6, 1.0, inkAngle));
@@ -223,6 +276,7 @@ export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, 
       uAniso: { value: 0 },
       uMotion: { value: 1 },
       uBack: { value: back ? 1 : 0 },
+      uGyro: { value: new THREE.Vector2(0, 0) },
       uInkGreen: { value: ink("--card-security-ink-green") },
       uInkSteel: { value: ink("--card-security-ink-steel") },
       uInkPlatinum: { value: ink("--card-security-ink-platinum") },
