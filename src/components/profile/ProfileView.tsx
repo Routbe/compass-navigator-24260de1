@@ -1,5 +1,6 @@
 import { runCustomVisitEffect, normalizeVisitCustom } from "@/lib/visit-effect-custom";
-import { glassSurfaceStyle, resolveComponentDesign, resolveScopedTokens, scopeOfBlockKind } from "@/lib/theme-engine";
+import { COMPONENT_SCOPES, glassSurfaceStyle, resolveComponentDesign, resolveScopedTokens, scopeOfBlockKind } from "@/lib/theme-engine";
+import { LiquidGlassFilters, useLiquidGlassRuntime } from "@/components/glass/LiquidGlass";
 import { LocaleDropdown } from "@/components/LocaleDropdown";
 import { profileSurface } from "@/lib/profile-surface";
 import { profileImageSrc } from "@/lib/image-proxy-rules";
@@ -367,7 +368,11 @@ export function ProfileView({
     };
   }, [prefs.visitEffect, preview]);
 
+  useLiquidGlassRuntime();
+  const lensTokens = [prefs, ...COMPONENT_SCOPES.map((s) => resolveScopedTokens(prefs, prefs.themeOverrides, s))];
   return (
+    <>
+    <LiquidGlassFilters tokens={lensTokens} />
     <main
       ref={mainRef}
       onClickCapture={preview ? (event) => {
@@ -909,6 +914,7 @@ export function ProfileView({
       )}
       {wireframe && <WireframeOverlay root={mainRef} />}
     </main>
+    </>
   );
 }
 
