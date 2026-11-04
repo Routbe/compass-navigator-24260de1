@@ -336,7 +336,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
   const slotY = qy + qrSize + 80 + 40;
 
   return (
-    <group ref={group} onClick={(e) => { e.stopPropagation(); if (e.delta < 6) onFlip(); }}>
+    <group ref={group} onClick={(e) => { e.stopPropagation(); if (e.delta < 6 && zoom.current <= 0.02) onFlip(); }}>
       <mesh geometry={body}>
         <meshPhysicalMaterial color="#26262b" metalness={0.95} roughness={0.32} clearcoat={0.4} />
       </mesh>
