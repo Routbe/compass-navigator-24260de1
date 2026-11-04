@@ -1420,3 +1420,33 @@ select:focus-visible {
 
 /* Liquid Glass lens: promoted only where SVG backdrop filters render (see LiquidGlass.tsx). */
 html[data-liquid] [style*="--lg-filter"] { backdrop-filter: var(--lg-filter) !important; }
+
+/* Elemental Typography Engine (profile name). Real text; GPU-cheap gradients + filters. */
+@property --tt-p { syntax: "<number>"; inherits: true; initial-value: 1; }
+.tt-fx { background-size: 220% 100% !important; -webkit-background-clip: text !important; background-clip: text !important; color: transparent !important; }
+.tt-fx-ice { background-image: linear-gradient(100deg, #e8fbff 0%, #8fe3ff 25%, #ffffff 40%, #4fb6e8 60%, #dff6ff 80%, #9fdcff 100%) !important; filter: drop-shadow(0 0 6px rgba(143, 227, 255, 0.55)) drop-shadow(0 1px 0 rgba(255, 255, 255, 0.8)); animation: tt-sheen 5.5s linear infinite; }
+.tt-fx-fire { background-image: linear-gradient(0deg, #7a0a00 0%, #ff3d00 30%, #ff9100 55%, #ffe066 80%, #fff6c4 100%) !important; background-size: 100% 260% !important; filter: drop-shadow(0 -2px 6px rgba(255, 100, 0, 0.7)) drop-shadow(0 0 14px rgba(255, 60, 0, 0.45)); animation: tt-flame 1.6s ease-in-out infinite alternate; }
+.tt-fx-mist { background-image: linear-gradient(100deg, rgba(230, 236, 245, 0.35), #ffffff 35%, rgba(200, 210, 225, 0.5) 60%, #f3f6fa 85%) !important; filter: blur(0.4px) drop-shadow(0 0 10px rgba(220, 230, 245, 0.7)); animation: tt-sheen 9s ease-in-out infinite alternate, tt-breathe 4.5s ease-in-out infinite; }
+.tt-fx-volt { background-image: linear-gradient(100deg, #b9f3ff 0%, #ffffff 18%, #5ab8ff 30%, #e6fbff 48%, #3a7bff 62%, #ffffff 80%, #9be8ff 100%) !important; filter: drop-shadow(0 0 4px #7fd6ff) drop-shadow(0 0 12px rgba(80, 150, 255, 0.8)); animation: tt-sheen 1.2s linear infinite, tt-flicker 2.4s steps(1) infinite; }
+@keyframes tt-sheen { from { background-position: 0% 50%; } to { background-position: 220% 50%; } }
+@keyframes tt-flame { from { background-position: 50% 100%; transform: skewX(-1deg); } to { background-position: 50% 30%; transform: skewX(1deg); } }
+@keyframes tt-breathe { 0%, 100% { opacity: 0.82; letter-spacing: inherit; } 50% { opacity: 1; } }
+@keyframes tt-flicker { 0%, 100% { opacity: 1; } 47% { opacity: 1; } 48% { opacity: 0.55; } 49% { opacity: 1; } 83% { opacity: 0.75; } 84% { opacity: 1; } }
+
+/* Entrances: animate --tt-p from 0 to the chosen reveal (--tt-reveal). */
+.tt-in-burn, .tt-in-dissolve { display: inline-block; animation-name: var(--tt-anim-fx, none), tt-reveal; animation-duration: 0s, 1.8s; animation-fill-mode: none, forwards; animation-timing-function: linear, cubic-bezier(0.16, 1, 0.3, 1); }
+.tt-fx.tt-in-burn, .tt-fx.tt-in-dissolve { animation: tt-reveal 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.tt-in-burn {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(var(--tt-p) * 100% - 6%), rgba(0, 0, 0, 0.6) calc(var(--tt-p) * 100%), transparent calc(var(--tt-p) * 100% + 4%));
+  mask-image: linear-gradient(90deg, #000 calc(var(--tt-p) * 100% - 6%), rgba(0, 0, 0, 0.6) calc(var(--tt-p) * 100%), transparent calc(var(--tt-p) * 100% + 4%));
+  filter: drop-shadow(0 0 calc((1 - var(--tt-p)) * 14px) #ff6a00);
+}
+.tt-in-dissolve {
+  -webkit-mask-image: radial-gradient(circle at 50% 60%, #000 calc(var(--tt-p) * 70%), transparent calc(var(--tt-p) * 70% + 30%));
+  mask-image: radial-gradient(circle at 50% 60%, #000 calc(var(--tt-p) * 70%), transparent calc(var(--tt-p) * 70% + 30%));
+  filter: blur(calc((1 - var(--tt-p)) * 6px));
+}
+@keyframes tt-reveal { from { --tt-p: 0; } to { --tt-p: var(--tt-reveal, 1); } }
+@media (prefers-reduced-motion: reduce) {
+  .tt-fx, .tt-in-burn, .tt-in-dissolve { animation: none !important; --tt-p: var(--tt-reveal, 1); }
+}
