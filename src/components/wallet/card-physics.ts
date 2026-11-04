@@ -104,3 +104,24 @@ export function decaySpin(v: number, dt: number, friction = SPIN_FRICTION): numb
 export function clampDragPitch(p: number): number {
   return Math.max(-MAX_DRAG_PITCH, Math.min(MAX_DRAG_PITCH, p));
 }
+
+/** Continuous zoom (0 overview .. 1 closest). Wheel scales by delta magnitude, never a fixed step. */
+export const ZOOM_WHEEL_RATE = 0.0025;
+export function zoomFromWheel(z: number, deltaY: number, deltaMode = 0): number {
+  const dy = deltaY * (deltaMode === 1 ? 16 : deltaMode === 2 ? 100 : 1);
+  return clampZoom(z - dy * ZOOM_WHEEL_RATE);
+}
+/** Pinch: finger distance ratio → zoom change (doubling the spread ≈ +0.6). */
+export function zoomFromPinch(z: number, startZ: number, startDist: number, dist: number): number {
+  void z;
+  if (startDist <= 0) return clampZoom(startZ);
+  return clampZoom(startZ + Math.log2(dist / startDist) * 0.6);
+}
+export function clampZoom(z: number): number {
+  return Math.max(0, Math.min(1, z));
+}
+/** Pan offset in [-1,1]; at zero zoom the card is always centred. */
+export function clampPan(p: { x: number; y: number }, z: number): { x: number; y: number } {
+  if (z <= 0.001) return { x: 0, y: 0 };
+  return { x: Math.max(-1, Math.min(1, p.x)), y: Math.max(-1, Math.min(1, p.y)) };
+}

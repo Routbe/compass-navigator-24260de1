@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, RotateCw, ShieldCheck, Smartphone, UserPlus, Wallet, ZoomIn, ZoomOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { GYRO_CALIBRATION_SAMPLES, GYRO_REST_MS, filterGyro, orientationToDegrees, orientationToTilt, SPIN_PER_FRAME_WIDTH } from "./card-physics";
+import { GYRO_CALIBRATION_SAMPLES, GYRO_REST_MS, filterGyro, orientationToDegrees, orientationToTilt, SPIN_PER_FRAME_WIDTH, zoomFromWheel, zoomFromPinch, clampPan, clampZoom } from "./card-physics";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -76,6 +76,9 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
   const [flatTilt, setFlatTilt] = useState({ x: 0, y: 0 });
   const live: LiveRef = useRef({ seed: [0.5, 0.5, 0.5, 0.5], expiresAt: 0, windowMs: 30_000 });
   const zoom: ZoomRef = useRef(0);
+  const stage = useRef<HTMLDivElement>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ dist: number; z: number; mx: number; my: number } | null>(null);
   const drag: DragRef = useRef({ down: false, dx: 0, dy: 0 });
   const grab = useRef<{ id: number; x: number; y: number } | null>(null);
   const [zoomed, setZoomed] = useState(false);
@@ -320,13 +323,65 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
     }
   };
 
+  const setZoom = useCallback((z: number) => {
+    const next = clampZoom(z);
+    zoom.current = next;
+    zoom.pan = clampPan(zoom.pan ?? { x: 0, y: 0 }, next);
+    tilt.current = { ...tilt.current, at: performance.now() };
+    setZoomed(next > 0.02);
+  }, []);
+  const spread = () => {
+    const [a, b] = [...pointers.current.values()];
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+  };
+  const panBy = (dxPx: number, dyPx: number, r: DOMRect) => {
+    // Content follows the hand: dragging right reveals the left side of the card.
+    const z = Math.max(zoom.current, 0.15);
+    const p = zoom.pan ?? { x: 0, y: 0 };
+    zoom.pan = clampPan({ x: p.x - (dxPx / r.width) * 2.4 / z, y: p.y + (dyPx / r.height) * 2.4 / z }, zoom.current);
+  };
+
+  // Wheel + trackpad pinch (ctrlKey wheel); non-passive so the page never scrolls/zooms behind the card.
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const before = zoom.current;
+      const next = zoomFromWheel(before, e.deltaY * (e.ctrlKey ? 4 : 1), e.deltaMode);
+      // Zoom towards the cursor: drift the pan target to the pointed spot.
+      if (next > before) {
+        const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+        const ny = -(((e.clientY - r.top) / r.height) * 2 - 1);
+        const p = zoom.pan ?? { x: 0, y: 0 };
+        const w = Math.min(1, (next - before) * 3);
+        zoom.pan = { x: p.x + (nx * 1.3 - p.x) * w, y: p.y + (ny * 1.3 - p.y) * w };
+      }
+      setZoom(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [setZoom, open, faces]);
+
   const onGrab = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 2) {
+      // Second finger: stop spinning, start pinch-zoom + two-finger pan.
+      grab.current = null;
+      drag.current.down = false;
+      pinch.current = { ...spread(), z: zoom.current };
+      return;
+    }
+    if (pointers.current.size > 2) return;
     grab.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
-    drag.current.down = true;
+    drag.current.down = zoom.current <= 0.02;
   }, []);
   const onRelease = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
     if (grab.current?.id !== e.pointerId) return;
     grab.current = null;
     drag.current.down = false;
@@ -334,8 +389,26 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
   }, []);
   const onPointer = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
+    if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pc = pinch.current;
+    if (pc && pointers.current.size >= 2) {
+      const s2 = spread();
+      setZoom(zoomFromPinch(zoom.current, pc.z, pc.dist, s2.dist));
+      panBy(s2.mx - pc.mx, s2.my - pc.my, r);
+      pc.mx = s2.mx;
+      pc.my = s2.my;
+      return;
+    }
     const g = grab.current;
     if (g && g.id === e.pointerId) {
+      if (zoom.current > 0.02) {
+        // Zoomed in: one finger / mouse drag pans across the card details.
+        panBy(e.clientX - g.x, e.clientY - g.y, r);
+        g.x = e.clientX;
+        g.y = e.clientY;
+        tilt.current = { ...tilt.current, at: performance.now() };
+        return;
+      }
       drag.current.dx += ((e.clientX - g.x) / r.width) * SPIN_PER_FRAME_WIDTH;
       drag.current.dy += ((e.clientY - g.y) / r.height) * 1.2;
       g.x = e.clientX;
@@ -347,7 +420,7 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
     const y = -(((e.clientY - r.top) / r.height) * 2 - 1);
     tilt.current = { x, y, at: performance.now() };
     setFlatTilt({ x, y });
-  }, []);
+  }, [setZoom]);
 
   const flip = () => {
     tilt.current = { ...tilt.current, at: performance.now() };
@@ -355,10 +428,8 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
   };
 
   const toggleZoom = () => {
-    const next = !zoomed;
-    zoom.current = next ? 1 : 0;
-    tilt.current = { ...tilt.current, at: performance.now() };
-    setZoomed(next);
+    if (zoomed) zoom.pan = { x: 0, y: 0 };
+    setZoom(zoomed ? 0 : 0.6);
   };
 
   const checkCode = async () => {
@@ -434,7 +505,9 @@ export function RoutCardDialog({ open, onOpenChange, handle, space }: { open: bo
           onPointerDown={onGrab}
           onPointerUp={onRelease}
           onPointerCancel={onRelease}
-          style={{ cursor: "grab" }}
+          onDoubleClick={() => { if (zoomed) zoom.pan = { x: 0, y: 0 }; setZoom(zoomed ? 0 : 0.75); }}
+          ref={stage}
+          style={{ cursor: zoomed ? "move" : "grab" }}
           data-scene-ready={ready ? "true" : undefined}
         >
           {card === null ? (
