@@ -347,7 +347,7 @@ void main() {
 }
 `;
 
-export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, texel: [number, number], back = false): THREE.ShaderMaterial {
+export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, texel: [number, number], back = false, portrait: THREE.Texture | null = null): THREE.ShaderMaterial {
   const tokens = getComputedStyle(document.documentElement);
   const ink = (name: string) => new THREE.Color(tokens.getPropertyValue(name).trim());
   return new THREE.ShaderMaterial({
@@ -357,6 +357,7 @@ export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, 
     uniforms: {
       uMap: { value: map },
       uMask: { value: mask },
+      uPortrait: { value: portrait ?? mask },
       uTime: { value: 0 },
       uFinish: { value: 0 },
       uSeed: { value: new THREE.Vector4(0.5, 0.5, 0.5, 0.5) },
