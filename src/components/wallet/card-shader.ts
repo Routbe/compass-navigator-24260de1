@@ -32,6 +32,7 @@ void main() {
 const fragment = /* glsl */ `
 uniform sampler2D uMap;
 uniform sampler2D uMask;
+uniform sampler2D uPortrait;
 uniform float uTime;
 uniform float uFinish;   // 0 metal, 1 glass, 2 holo
 uniform vec4 uSeed;      // live server seed for this 30 s window
@@ -141,7 +142,7 @@ void main() {
   vec3 mask = texture2D(uMask, vUv).rgb * (1.0 - uBack);
   // Never print optical layers over QR quiet zones, portraits or MRZ.
   float frontReserved = max(boxMask(vUv, uQrBox.xy, uQrBox.zw),
-    1.0 - smoothstep(0.235, 0.25, length((vUv - vec2(0.5, 0.58)) * vec2(1.0, 1.588))));
+    (1.0 - smoothstep(0.235, 0.25, length((vUv - vec2(0.5, 0.58)) * vec2(1.0, 1.588)))) * texture2D(uPortrait, vUv).r);
   float backReserved = max(boxMask(vUv, uQrBox.xy, uQrBox.zw),
     1.0 - smoothstep(0.148, 0.16, vUv.y));
   float printable = 1.0 - mix(frontReserved, backReserved, uBack);
