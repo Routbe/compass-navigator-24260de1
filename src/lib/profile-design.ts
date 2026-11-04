@@ -1,3 +1,4 @@
+import { TITLE_EFFECTS, TITLE_ENTRANCES, type TitleEffect, type TitleEntrance } from "./title-typography";
 import {
   DEFAULT_GLASS,
   DEFAULT_GLASS_TARGETS,
@@ -100,6 +101,16 @@ export interface ProfileDesignPrefs {
   titleLetterSpacing: number;
   /** Gloedsterkte van de profielnaam (0–40 px). */
   titleGlow: number;
+  /** Elemental Typography Engine — see title-typography.ts. */
+  titleGradientTo: string | null;
+  titleShadowBlur: number;
+  titleShadowX: number;
+  titleShadowY: number;
+  titleShadowColor: string | null;
+  titleEffect: TitleEffect;
+  titleEntrance: TitleEntrance;
+  /** How far the entrance has revealed the name (0–100). */
+  titleReveal: number;
   /** Hoogte van de banner in px (0 = automatisch). */
   bannerHeight: number;
   /** Diameter van de avatar in px. */
@@ -282,6 +293,14 @@ export const DEFAULT_DESIGN_PREFS: ProfileDesignPrefs = {
   titleColor: null,
   titleLetterSpacing: 0,
   titleGlow: 0,
+  titleGradientTo: null,
+  titleShadowBlur: 0,
+  titleShadowX: 0,
+  titleShadowY: 0,
+  titleShadowColor: null,
+  titleEffect: "none",
+  titleEntrance: "none",
+  titleReveal: 100,
   bannerHeight: 128,
   avatarSize: 80,
   avatarAlign: "center",
@@ -929,6 +948,14 @@ export function normalizeDesignPrefs(r: Record<string, unknown>): ProfileDesignP
     titleColor: hex(r["titleColor"]),
     titleLetterSpacing: num(r["titleLetterSpacing"], -1, 12, 0),
     titleGlow: num(r["titleGlow"], 0, 40, 0),
+    titleGradientTo: hex(r["titleGradientTo"]),
+    titleShadowBlur: num(r["titleShadowBlur"], 0, 40, 0),
+    titleShadowX: num(r["titleShadowX"], -20, 20, 0),
+    titleShadowY: num(r["titleShadowY"], -20, 20, 0),
+    titleShadowColor: hex(r["titleShadowColor"]),
+    titleEffect: pick(r["titleEffect"], TITLE_EFFECTS.map((e) => e.id), "none"),
+    titleEntrance: pick(r["titleEntrance"], TITLE_ENTRANCES.map((e) => e.id), "none"),
+    titleReveal: num(r["titleReveal"], 0, 100, 100),
     bannerHeight: num(r["bannerHeight"], 64, 360, 128),
     avatarSize: num(r["avatarSize"], 56, 160, 80),
     avatarAlign: pick(r["avatarAlign"], ["left", "center", "right"] as const, "center"),

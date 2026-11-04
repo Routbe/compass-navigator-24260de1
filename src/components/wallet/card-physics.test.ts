@@ -88,3 +88,20 @@ describe("grab spin", () => {
     expect(_clampP(2)).toBe(_MP);
   });
 });
+
+import { zoomFromWheel, zoomFromPinch, clampPan } from "./card-physics";
+describe("card zoom", () => {
+  it("wheel zooms by delta size and clamps 0..1", () => {
+    expect(zoomFromWheel(0, -100)).toBeCloseTo(0.25);
+    expect(zoomFromWheel(0.5, 10_000)).toBe(0);
+    expect(zoomFromWheel(0.5, -10_000)).toBe(1);
+    expect(zoomFromWheel(0, -10, 1)).toBeCloseTo(0.4);
+  });
+  it("pinch doubling spread adds 0.6", () => {
+    expect(zoomFromPinch(0, 0.2, 100, 200)).toBeCloseTo(0.8);
+  });
+  it("pan centres at zero zoom", () => {
+    expect(clampPan({ x: 0.7, y: -3 }, 0)).toEqual({ x: 0, y: 0 });
+    expect(clampPan({ x: 0.7, y: -3 }, 0.5)).toEqual({ x: 0.7, y: -1 });
+  });
+});

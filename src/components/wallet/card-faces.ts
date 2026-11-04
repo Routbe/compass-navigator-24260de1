@@ -15,7 +15,7 @@ export const FACE_H = Math.round(FACE_W * CARD_RATIO);
  * front/back: printed artwork. mask (WebGL only): R = holographic foil
  * (emblem, ring, frame), G = latent kinegram watermark, B = emboss height.
  */
-export type CardFaces = { front: HTMLCanvasElement; back: HTMLCanvasElement; mask: HTMLCanvasElement; qrFront?: QrBox; qrBack?: QrBox };
+export type CardFaces = { front: HTMLCanvasElement; back: HTMLCanvasElement; mask: HTMLCanvasElement; /** R = portrait opacity (transparent avatar pixels let the card materials show through). */ portrait?: HTMLCanvasElement; qrFront?: QrBox; qrBack?: QrBox };
 
 function shade(hex: string, amount: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -116,6 +116,7 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   const front = make();
   const back = make();
   const mask = make();
+  const portrait = make();
   const bg = card.hexBackgroundColor;
   const fg = card.hexForegroundColor;
   const avatar = card.avatarPath ? await loadImage(card.avatarPath) : null;
@@ -176,7 +177,22 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   if (avatar) {
     const s = Math.max((2 * r) / avatar.width, (2 * r) / avatar.height);
     f.drawImage(avatar, cx - (avatar.width * s) / 2, cy - (avatar.height * s) / 2, avatar.width * s, avatar.height * s);
+    const pc = portrait.getContext("2d")!;
+    pc.save();
+    pc.beginPath();
+    pc.arc(cx, cy, r, 0, Math.PI * 2);
+    pc.clip();
+    pc.drawImage(avatar, cx - (avatar.width * s) / 2, cy - (avatar.height * s) / 2, avatar.width * s, avatar.height * s);
+    pc.globalCompositeOperation = "source-in";
+    pc.fillStyle = "#fff";
+    pc.fillRect(0, 0, FACE_W, FACE_H);
+    pc.restore();
   } else {
+    const pc = portrait.getContext("2d")!;
+    pc.fillStyle = "#fff";
+    pc.beginPath();
+    pc.arc(cx, cy, r, 0, Math.PI * 2);
+    pc.fill();
     f.fillStyle = shade(bg, 0.18);
     f.fillRect(cx - r, cy - r, 2 * r, 2 * r);
     f.fillStyle = fg;
@@ -307,7 +323,7 @@ export async function drawCardFaces(card: Omit<WalletCardPayload, "heroImageUrl"
   lines.forEach((line, row) => {
     for (let c = 0; c < line.length; c++) b.fillText(line.charAt(c), 32 + c * cw, mrzTop + 42 + row * 38);
   });
-  return { front, back, mask, qrFront: fq, qrBack: bq };
+  return { front, back, mask, portrait, qrFront: fq, qrBack: bq };
 }
 
 export function hasWebGL(): boolean {

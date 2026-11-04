@@ -32,6 +32,7 @@ void main() {
 const fragment = /* glsl */ `
 uniform sampler2D uMap;
 uniform sampler2D uMask;
+uniform sampler2D uPortrait;
 uniform float uTime;
 uniform float uFinish;   // 0 metal, 1 glass, 2 holo
 uniform vec4 uSeed;      // live server seed for this 30 s window
@@ -141,7 +142,7 @@ void main() {
   vec3 mask = texture2D(uMask, vUv).rgb * (1.0 - uBack);
   // Never print optical layers over QR quiet zones, portraits or MRZ.
   float frontReserved = max(boxMask(vUv, uQrBox.xy, uQrBox.zw),
-    1.0 - smoothstep(0.235, 0.25, length((vUv - vec2(0.5, 0.58)) * vec2(1.0, 1.588))));
+    (1.0 - smoothstep(0.235, 0.25, length((vUv - vec2(0.5, 0.58)) * vec2(1.0, 1.588)))) * texture2D(uPortrait, vUv).r);
   float backReserved = max(boxMask(vUv, uQrBox.xy, uQrBox.zw),
     1.0 - smoothstep(0.148, 0.16, vUv.y));
   float printable = 1.0 - mix(frontReserved, backReserved, uBack);
@@ -346,7 +347,7 @@ void main() {
 }
 `;
 
-export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, texel: [number, number], back = false): THREE.ShaderMaterial {
+export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, texel: [number, number], back = false, portrait: THREE.Texture | null = null): THREE.ShaderMaterial {
   const tokens = getComputedStyle(document.documentElement);
   const ink = (name: string) => new THREE.Color(tokens.getPropertyValue(name).trim());
   return new THREE.ShaderMaterial({
@@ -356,6 +357,7 @@ export function createSecurityMaterial(map: THREE.Texture, mask: THREE.Texture, 
     uniforms: {
       uMap: { value: map },
       uMask: { value: mask },
+      uPortrait: { value: portrait ?? mask },
       uTime: { value: 0 },
       uFinish: { value: 0 },
       uSeed: { value: new THREE.Vector4(0.5, 0.5, 0.5, 0.5) },

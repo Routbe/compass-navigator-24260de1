@@ -1,3 +1,4 @@
+import { titleTypographyClass, titleTypographyStyle } from "@/lib/title-typography";
 import { runCustomVisitEffect, normalizeVisitCustom } from "@/lib/visit-effect-custom";
 import { COMPONENT_SCOPES, glassSurfaceStyle, resolveComponentDesign, resolveScopedTokens, scopeOfBlockKind } from "@/lib/theme-engine";
 import { LiquidGlassFilters, useLiquidGlassRuntime } from "@/components/glass/LiquidGlass";
@@ -481,10 +482,12 @@ export function ProfileView({
 
         <h1
           className="mt-4 flex max-w-full flex-wrap items-center justify-center gap-1.5 break-words text-center font-display text-2xl"
-          style={prefs.typographyCustom || prefs.customDesign ? { fontFamily: fonts.heading, fontSize: `${prefs.titleScale}%`, letterSpacing: prefs.titleLetterSpacing, textShadow: prefs.titleGlow > 0 ? `0 0 ${prefs.titleGlow}px currentColor` : undefined } : undefined}
+          style={prefs.typographyCustom || prefs.customDesign ? { fontFamily: fonts.heading, fontSize: `${prefs.titleScale}%`, letterSpacing: prefs.titleLetterSpacing, } : undefined}
         >
           <span
-            style={(prefs.typographyCustom || prefs.customDesign) && prefs.titleColor ? { color: prefs.titleColor } : nameStyle}
+            key={`${prefs.titleEntrance}-${prefs.titleReveal}`}
+            className={prefs.typographyCustom || prefs.customDesign ? titleTypographyClass(prefs) || undefined : undefined}
+            style={(prefs.typographyCustom || prefs.customDesign) && (prefs.titleColor || prefs.titleGradientTo || prefs.titleShadowBlur || prefs.titleShadowX || prefs.titleShadowY || prefs.titleEffect !== "none" || prefs.titleEntrance !== "none") ? titleTypographyStyle(prefs, t.text) : nameStyle}
           >
             {profile.display_name || `@${profile.username}`}
           </span>

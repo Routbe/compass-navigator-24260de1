@@ -21,7 +21,8 @@ export type CardFinish = "metal" | "glass" | "holo" | "junior";
 /** `rest` (ms): recentre after this long without change; omitted = never (mouse). */
 export type TiltRef = { current: { x: number; y: number; at: number; rest?: number } };
 export type LiveRef = { current: { seed: [number, number, number, number]; expiresAt: number; windowMs: number } };
-export type ZoomRef = { current: number };
+/** current: 0 (overview) .. 1 (closest). pan: card-local offset the camera looks at, in [-1,1]. */
+export type ZoomRef = { current: number; pan?: { x: number; y: number } };
 /** Grab input: dx/dy are radians accumulated since the last frame (consumed by the card). */
 export type DragRef = { current: { down: boolean; dx: number; dy: number } };
 
@@ -193,9 +194,9 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
       t.minFilter = THREE.LinearMipmapLinearFilter;
       return t;
     };
-    return { front: make(faces.front, true), back: make(faces.back, true), mask: make(faces.mask, false) };
+    return { front: make(faces.front, true), back: make(faces.back, true), mask: make(faces.mask, false), portrait: faces.portrait ? make(faces.portrait, false) : null };
   }, [faces, maxAniso]);
-  const security = useMemo(() => createSecurityMaterial(textures.front, textures.mask, [1 / FACE_W, 1 / FACE_H]), [textures]);
+  const security = useMemo(() => createSecurityMaterial(textures.front, textures.mask, [1 / FACE_W, 1 / FACE_H], false, textures.portrait), [textures]);
   const backSecurity = useMemo(() => createSecurityMaterial(textures.back, textures.mask, [1 / FACE_W, 1 / FACE_H], true), [textures]);
   const materials = useMemo(() => [security, backSecurity], [security, backSecurity]);
   useEffect(() => {
@@ -226,6 +227,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
     textures.front.dispose();
     textures.back.dispose();
     textures.mask.dispose();
+    textures.portrait?.dispose();
   }, [textures]);
   useEffect(() => () => security.dispose(), [security]);
   useEffect(() => () => backSecurity.dispose(), [backSecurity]);
@@ -290,6 +292,11 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
     }
     m.z += (CAMERA_FAR + (CAMERA_NEAR - CAMERA_FAR) * zoom.current - m.z) * k(ZOOM_DAMP);
     camera.position.z = m.z;
+    // Pan only as far as the zoom allows, so the card never leaves the frame.
+    const pan = zoom.pan ?? { x: 0, y: 0 };
+    const reach = zoom.current;
+    camera.position.x += (pan.x * W * 0.5 * reach - camera.position.x) * k(ZOOM_DAMP);
+    camera.position.y += (pan.y * H * 0.5 * reach - camera.position.y) * k(ZOOM_DAMP);
     const wm = watermark.current;
     if (wm) {
       // Rigidly printed: every element stays fixed to the card body.
@@ -329,7 +336,7 @@ function Card({ faces, finish, pbr, flipped, tilt, live, zoom, secure, onFlip, d
   const slotY = qy + qrSize + 80 + 40;
 
   return (
-    <group ref={group} onClick={(e) => { e.stopPropagation(); if (e.delta < 6) onFlip(); }}>
+    <group ref={group} onClick={(e) => { e.stopPropagation(); if (e.delta < 6 && zoom.current <= 0.02) onFlip(); }}>
       <mesh geometry={body}>
         <meshPhysicalMaterial color="#26262b" metalness={0.95} roughness={0.32} clearcoat={0.4} />
       </mesh>
